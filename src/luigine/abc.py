@@ -50,7 +50,7 @@ def main():
     
     # run
     try:
-        luigi.run()
+        luigi.run(local_scheduler=True)
     except:
         import traceback
         if os.path.exists("engine_status.progress"):
