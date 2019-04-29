@@ -14,6 +14,7 @@ import errno
 import hashlib
 import os
 import luigi
+import luigi.mock
 from .utils import sort_dict, dict_to_str
 
 
@@ -129,6 +130,7 @@ class AutoNamingTask(luigi.Task):
     hash_num = luigi.IntParameter(default=10)
     working_subdir = luigi.Parameter()
     output_ext = luigi.Parameter(default='pklz')
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.param_name = ""
@@ -154,6 +156,8 @@ class AutoNamingTask(luigi.Task):
         self.param_name = self.param_name[:-1]
 
     def output(self):
+        if not os.path.exists('OUTPUT'):
+            os.mkdir('OUTPUT')
         if not os.path.exists(os.path.join(
                 "OUTPUT",
                 self.working_subdir)):
