@@ -27,7 +27,7 @@ def curse_failure(*kwargs):
         f.write("error: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
     with open(os.path.join("ENGLOG", "engine.log"), "a") as f:
         f.write("{}".format(kwargs))
-    raise RuntimeError('something happens')
+    raise RuntimeError('error occurs and halt.')
 
 
 def main():
@@ -51,10 +51,15 @@ def main():
     
     # run
     try:
-        luigi.run(local_scheduler=True)
+        is_success = luigi.run(local_scheduler=True)
+        if not is_success:
+            raise RuntimeError('task fails')
+        if os.path.exists("engine_status.progress"):
+            os.rename("engine_status.progress", "engine_status.complete")
     except:
         import traceback
         if os.path.exists("engine_status.progress"):
+            # when KeyboardInterrupt occurs, curse_failure may be halted during its process.
             os.rename("engine_status.progress", "engine_status.error")
         with open("engine_status.error", "a") as f:
             f.write("error: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
@@ -69,26 +74,6 @@ class MainTask(luigi.Task):
     '''
 
     working_dir = luigi.Parameter()
-    
-    def on_success(self):
-        if os.path.exists("engine_status.progress"):
-            os.rename("engine_status.progress", "engine_status.complete")
-            with open("engine_status.complete", "a") as f:
-                f.write("complete: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-        elif os.path.exists("engine_status.error"):
-            with open("engine_status.error", "a") as f:
-                f.write("error: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-        else:
-            raise RuntimeError("unknown engine_status")
-
-    def on_failure(self, exception):
-        if os.path.exists("engine_status.progress"):
-            os.rename("engine_status.progress", "engine_status.error")
-        if not os.path.exists("engine_status.error"):
-            raise RuntimeError("unknown engine_status")
-        with open("engine_status.error", "a") as f:
-            f.write("error: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-        super().on_failure(exception)
 
 
 class MainWrapperTask(luigi.WrapperTask):
@@ -98,26 +83,6 @@ class MainWrapperTask(luigi.WrapperTask):
     '''
 
     working_dir = luigi.Parameter()
-
-    def on_success(self):
-        if os.path.exists("engine_status.progress"):
-            os.rename("engine_status.progress", "engine_status.complete")
-            with open("engine_status.complete", "a") as f:
-                f.write("complete: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-        elif os.path.exists("engine_status.error"):
-            with open("engine_status.error", "a") as f:
-                f.write("error: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-        else:
-            raise RuntimeError("unknown engine_status")
-
-    def on_failure(self, exception):
-        if os.path.exists("engine_status.progress"):
-            os.rename("engine_status.progress", "engine_status.error")
-        if not os.path.exists("engine_status.error"):
-            raise RuntimeError("unknown engine_status")
-        with open("engine_status.error", "a") as f:
-            f.write("error: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-        super().on_failure(exception)
 
 
 class AutoNamingTask(luigi.Task):
