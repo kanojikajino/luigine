@@ -7,6 +7,7 @@ __copyright__ = "(c) Copyright IBM Corp. 2019"
 __version__ = "1.0"
 __date__ = "Apr 15, 2019"
 
+from abc import abstractmethod
 from copy import deepcopy
 from collections import OrderedDict
 from datetime import datetime
@@ -14,7 +15,6 @@ import errno
 import hashlib
 import os
 import luigi
-import luigi.mock
 from .utils import sort_dict, dict_to_str
 
 
@@ -134,7 +134,7 @@ class AutoNamingTask(luigi.Task):
             self.working_subdir,
             "{}.{}".format(self.param_name, self.output_ext)))
 
-    @classmethod
-    def load_output(cls, path: str) -> object:
+    @abstractmethod
+    def load_output(self) -> object:
         "Interface to load and return the output object."
         raise NotImplementedError()
