@@ -135,6 +135,6 @@ class AutoNamingTask(luigi.Task):
             "{}.{}".format(self.param_name, self.output_ext)))
 
     @classmethod
-    def load_output(cls, output_path):
+    def load_output(cls, path: str) -> object:
         "Interface to load and return the output object."
         raise NotImplementedError()
