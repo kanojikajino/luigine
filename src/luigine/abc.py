@@ -40,15 +40,15 @@ def main():
         raise FileNotFoundError(errno.ENOENT,
                                 os.strerror(errno.ENOENT),
                                 os.path.join("INPUT", "luigi.cfg"))
-    
+
     # mkdir if not exists
     if not os.path.exists(os.path.join("ENGLOG")): os.mkdir(os.path.join("ENGLOG"))
     if not os.path.exists(os.path.join("OUTPUT")): os.mkdir(os.path.join("OUTPUT"))
-    
+
     os.rename("engine_status.ready", "engine_status.progress")
     with open("engine_status.progress", "a") as f:
         f.write("progress: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-    
+
     # run
     try:
         is_success = luigi.run(local_scheduler=True)
@@ -133,3 +133,8 @@ class AutoNamingTask(luigi.Task):
             "OUTPUT",
             self.working_subdir,
             "{}.{}".format(self.param_name, self.output_ext)))
+
+    @classmethod
+    def load_output(cls, path: str) -> object:
+        "Interface to load and return the output object."
+        raise NotImplementedError()
