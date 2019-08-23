@@ -1,11 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-""" Title """
 
-__author__ = "Hiroshi Kajino <KAJINO@jp.ibm.com>"
+__author__ = "Hiroshi Kajino"
 __copyright__ = "(c) Copyright IBM Corp. 2019"
 __version__ = "1.0"
-__date__ = "Apr 15, 2019"
 
 from copy import deepcopy
 from collections import OrderedDict

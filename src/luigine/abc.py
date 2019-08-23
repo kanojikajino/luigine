@@ -1,20 +1,20 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-""" Title """
 
-__author__ = "Hiroshi Kajino <KAJINO@jp.ibm.com>"
+__author__ = "Hiroshi Kajino, Takeshi Teshima"
 __copyright__ = "(c) Copyright IBM Corp. 2019"
 __version__ = "1.0"
-__date__ = "Apr 15, 2019"
 
 from abc import abstractmethod
 from copy import deepcopy
 from collections import OrderedDict
 from datetime import datetime
 import errno
+import gzip
 import hashlib
-import os
 import luigi
+import os
+import pickle
 from .utils import sort_dict, dict_to_str
 
 
@@ -75,7 +75,7 @@ class MainTask(luigi.Task):
 
     working_dir = luigi.Parameter()
 
-    def load_output(self) -> object:
+    def load_output(self):
         "Interface to load and return the output object."
         pass
 
@@ -88,7 +88,7 @@ class MainWrapperTask(luigi.WrapperTask):
 
     working_dir = luigi.Parameter()
 
-    def load_output(self) -> object:
+    def load_output(self):
         "Interface to load and return the output object."
         pass
 
@@ -97,6 +97,15 @@ class AutoNamingTask(luigi.Task):
 
     '''
     This task defines the output name automatically from task parameters.
+
+    Attributes
+    ----------
+    hash_num : int
+        the number of characters used for hashing
+    working_subdir : str
+        the name of directory where the output of this task is stored
+    output_ext : str
+        extension of the output file
     '''
 
     __no_hash_keys__ = []
@@ -142,7 +151,7 @@ class AutoNamingTask(luigi.Task):
             self.working_subdir,
             "{}.{}".format(self.param_name, self.output_ext)))
 
-    @abstractmethod
-    def load_output(self) -> object:
-        "Interface to load and return the output object."
-        raise NotImplementedError()
+    def load_output(self):
+        with gzip.open(self.output().path, 'rb') as f:
+            res = pickle.load(f)
+        return res

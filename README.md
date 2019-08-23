@@ -9,6 +9,25 @@ Library for developing an engine using luigi. Key features are:
 
 ## Dependency
 - luigi
+- numpy
+- sklearn
+
+## Example
+See `example.py`.
+
+There are three tasks in `example.py`:
+
+1. `DataPreprocessing` task prepares training and test data sets.
+1. `Train` task, given the result of `DataPreprocessing`, trains a ridge regression model using the training data.
+1. `PerformanceEvaluation` task, given the results of the above two tasks, evaluates the model on the test set.
+
+The following command is used to run `PerformanceEvaluation`:
+```
+python example.py PerformanceEvaluation --working-dir example_working_dir
+```
+and the results are stored under `example_working_dir/OUTPUT`.
+Log is stored in `ENGLOG/engine.log`
+
 
 ## Difference from luigi
 Task in luigi has three methods to be implemented, `requires`, `output`, and `run`.
