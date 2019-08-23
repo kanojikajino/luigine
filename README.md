@@ -3,7 +3,6 @@ Luigine
 
 Library for developing an engine using luigi. Key features are:
 
-- 
 - auto-naming capability defines the output file name from task parameters.
 - `load_output` offers an interface to load the output object from a parental task.
 
