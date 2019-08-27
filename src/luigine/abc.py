@@ -186,7 +186,7 @@ class OptunaTask(AutoNamingTask):
     working_subdir = luigi.Parameter(default='optuna')
 
     def obj_task(self):
-        ''' return a `luigi.Task` class, which, given a set of parameters in dict, returns a `loss` to be minimized.
+        ''' return a `luigi.Task` instance, which, given a set of parameters in dict, returns a `loss` to be minimized.
         '''
         raise NotImplementedError
 

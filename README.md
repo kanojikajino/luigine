@@ -13,6 +13,12 @@ Library for developing an engine using luigi. Key features are:
 - optuna
 - sklearn
 
+## Installation
+
+```
+python setup.py install
+```
+
 ## Example
 See `example.py`.
 
@@ -59,3 +65,7 @@ def load_output(self):
         obj = pickle.load(f)
     return obj
 ```
+
+# Collaborators
+- Hiroshi Kajino
+- Takeshi Teshima

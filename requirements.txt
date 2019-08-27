@@ -1,3 +1,4 @@
 luigi
 numpy
+optuna
 sklearn
