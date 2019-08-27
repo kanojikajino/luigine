@@ -12,10 +12,16 @@ from datetime import datetime
 import errno
 import gzip
 import hashlib
+import logging
 import luigi
+import numpy as np
+import optuna
 import os
 import pickle
+import pprint
 from .utils import sort_dict, dict_to_str
+
+logger = logging.getLogger('luigi-interface')
 
 
 @luigi.Task.event_handler(luigi.Event.FAILURE)
@@ -155,3 +161,116 @@ class AutoNamingTask(luigi.Task):
         with gzip.open(self.output().path, 'rb') as f:
             res = pickle.load(f)
         return res
+
+
+class OptunaTask(AutoNamingTask):
+
+    ''' Parameter optimization task using Optuna.
+    Given a task that receives parameters and outputs a loss to be minimized,
+    this task can find better parameters that will achieve lower loss.
+
+    Attributes
+    ----------
+    OptunaTask_params : DictParameters
+        Dictionary of Dictionaries, where each dictionary corresponds to each task's `DictParameter`
+        A key starting from `@` will get suggestion from optuna.
+        For example, if the user would like to choose better regularization parameter `C` from [0, 1], instead of specifying {'C': 1.0}, specify it as {'@C': ['uniform', [0, 1]]}.
+        The first element of the value is used to choose `suggest_{}` method, and the second element (list) is used as args for the suggestion method.
+    n_trials : int
+        the number of trials in optuna.
+    '''
+
+    output_ext = luigi.Parameter(default='db')
+    OptunaTask_params = luigi.DictParameter()
+    n_trials = luigi.IntParameter(default=100)
+    working_subdir = luigi.Parameter(default='optuna')
+
+    def obj_task(self):
+        ''' return a `luigi.Task` class, which, given a set of parameters in dict, returns a `loss` to be minimized.
+        '''
+        raise NotImplementedError
+
+    def run(self):
+        study_name = os.path.splitext(os.path.basename(self.output().path))[0]
+        study = optuna.create_study(study_name=study_name, storage=f'sqlite:///{self.output().path}')
+        study.optimize(self.objective, n_trials=self.n_trials, n_jobs=1)
+        best_params_str = pprint.pformat(study.best_params)
+        logger.info(f'''
+=====================================
+best_params:\n{best_params_str}
+best_value:\t{study.best_value}
+=====================================
+        ''')
+
+    def create_params(self, trial):
+        ''' create a dictionary of parameters for `obj_task` given a trial
+
+        Parameters
+        ----------
+        trial : optuna.trial.Trial
+            trial object
+
+        Returns
+        -------
+        dict
+            parameters for `obj_task`
+        '''
+
+        def _create_subparams(trial, param_dict):
+            out_param_dict = dict()
+            for each_key, each_val in param_dict.items():
+                if isinstance(each_val, (dict, OrderedDict, luigi.parameter._FrozenOrderedDict)):
+                    out_param_dict[each_key] = _create_subparams(trial, each_val)
+                elif each_key.startswith('@'):
+                    out_param_dict[each_key[1:]] = getattr(
+                        trial,
+                        'suggest_{}'.format(each_val[0]))(each_key[1:], *each_val[1])
+                else:
+                    out_param_dict[each_key] = each_val
+            return out_param_dict
+
+        return _create_subparams(trial, self.OptunaTask_params)
+
+    def objective(self, trial):
+        ''' objective function
+
+        Parameters
+        ----------
+        trial : optuna.trial.Trial
+            trial object
+
+        Returns
+        -------
+        float
+            loss to be minimized. if a task fails, it returns `np.inf`
+        '''
+        param_dict = self.create_params(trial)
+        res = self.obj_task(**param_dict)
+        luigi.build([res])
+        try:
+            val = float(res.output().open('r').read())
+        except:
+            val = np.inf
+            
+        return val
+
+    def load_output(self):
+        study_name = os.path.splitext(os.path.basename(self.output().path))[0]
+        study = optuna.load_study(study_name=study_name,
+                                  storage=f'sqlite:///{self.output().path}')
+        return study
+
+    def get_best_params(self):
+        study = self.load_output()
+
+        def _create_subparams(study, param_dict):
+            out_param_dict = dict()
+            for each_key, each_val in param_dict.items():
+                if isinstance(each_val, (dict, OrderedDict, luigi.parameter._FrozenOrderedDict)):
+                    out_param_dict[each_key] = _create_subparams(study, each_val)
+                elif each_key.startswith('@'):
+                    out_param_dict[each_key[1:]] = study.best_params[each_key[1:]]
+                else:
+                    out_param_dict[each_key] = each_val
+            return out_param_dict
+        return _create_subparams(study, self.OptunaTask_params)

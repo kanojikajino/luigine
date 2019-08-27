@@ -10,6 +10,7 @@ __date__ = "Aug 23 2019"
 DataPreprocessing_params = {
     'in_dim': 5,
     'train_size': 1000,
+    'val_size': 100,
     'test_size': 100}
 
 Train_params = {
@@ -18,3 +19,16 @@ Train_params = {
 }
 
 PerformanceEvaluation_params = {}
+
+
+HyperparameterOptimization_params = {
+    'DataPreprocessing_params' : {
+        'in_dim': 50,
+        'train_size': 100,
+        'val_size': 100,
+        'test_size': 500},
+    'Train_params': {
+        'model_kwargs': {'@alpha': ['uniform', [0, 1]],
+                         '@fit_intercept': ["categorical", [[True, False]]]}
+    }
+}
