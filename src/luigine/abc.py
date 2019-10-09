@@ -8,18 +8,22 @@ __version__ = "1.0"
 from abc import abstractmethod
 from copy import deepcopy
 from collections import OrderedDict
-from datetime import datetime
+from optuna import trial as trial_module
+from optuna import structs
+import datetime
 import errno
+import gc
 import gzip
 import hashlib
 import logging
 import luigi
+import math
 import numpy as np
 import optuna
 import os
 import pickle
 import pprint
-from .utils import sort_dict, dict_to_str
+from .utils import sort_dict, dict_to_str, checksum
 
 logger = logging.getLogger('luigi-interface')
 
@@ -30,13 +34,15 @@ def curse_failure(*kwargs):
     if os.path.exists("engine_status.progress"):
         os.rename("engine_status.progress", "engine_status.error")
     with open("engine_status.error", "a") as f:
-        f.write("error: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
+        f.write("error: {}\n".format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
     with open(os.path.join("ENGLOG", "engine.log"), "a") as f:
         f.write("{}".format(kwargs))
     raise RuntimeError('error occurs and halt.')
 
 
 def main():
+    optuna.logging.enable_propagation()
+    optuna.logging.disable_default_handler()
     # check INPUT directory
     if not os.path.exists(os.path.join("INPUT", "luigi.cfg")):
         raise FileNotFoundError(errno.ENOENT,
@@ -53,7 +59,7 @@ def main():
 
     os.rename("engine_status.ready", "engine_status.progress")
     with open("engine_status.progress", "a") as f:
-        f.write("progress: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
+        f.write("progress: {}\n".format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
 
     # run
     try:
@@ -68,7 +74,7 @@ def main():
             # when KeyboardInterrupt occurs, curse_failure may be halted during its process.
             os.rename("engine_status.progress", "engine_status.error")
         with open("engine_status.error", "a") as f:
-            f.write("error: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
+            f.write("error: {}\n".format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
         with open(os.path.join("ENGLOG", "engine.log"), "a") as f:
             f.write(traceback.format_exc())
 
@@ -122,6 +128,12 @@ class AutoNamingTask(luigi.Task):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.param_name = ""
+
+        # md5checksum of input files
+        if self.input_file():
+            for each_input_file in self.input_file():
+                self.param_name = self.param_name + checksum(each_input_file)[:self.hash_num] + '_'
+
         param_kwargs = deepcopy(self.__dict__["param_kwargs"])
         if "working_subdir" in param_kwargs: param_kwargs.pop("working_subdir")
         for each_key in self.__no_hash_keys__:
@@ -162,6 +174,10 @@ class AutoNamingTask(luigi.Task):
             res = pickle.load(f)
         return res
 
+    def input_file(self):
+        ''' return a list of input file paths
+        '''
+        return []
 
 class OptunaTask(AutoNamingTask):
 
@@ -191,9 +207,120 @@ class OptunaTask(AutoNamingTask):
         raise NotImplementedError
 
     def run(self):
+        ''' non-negligible part of this function was copied from optuna code distributed under MIT license.
+        License file: https://github.com/pfnet/optuna/blob/master/LICENSE
+        Copyright (c) 2018 Preferred Networks, Inc.
+        '''
         study_name = os.path.splitext(os.path.basename(self.output().path))[0]
-        study = optuna.create_study(study_name=study_name, storage=f'sqlite:///{self.output().path}')
-        study.optimize(self.objective, n_trials=self.n_trials, n_jobs=1)
+        study = optuna.create_study(study_name=study_name, storage=f'sqlite:///{self.output().path}',
+                                         load_if_exists=True)
+        n_prev_trials = len(study.trials)
+        n_trials = self.n_trials
+        timeout = None
+        catch = (Exception, )
+        callbacks = None
+
+        if not study._optimize_lock.acquire(False):
+            raise RuntimeError("Nested invocation of `Study.optimize` method isn't allowed.")
+
+        try:
+            i_trial = 0
+            time_start = datetime.datetime.now()
+            while True:
+                if n_trials is not None:
+                    if i_trial >= n_trials:
+                        break
+                    i_trial += 1
+
+                if timeout is not None:
+                    elapsed_seconds = (datetime.datetime.now() - time_start).total_seconds()
+                    if elapsed_seconds >= timeout:
+                        break
+
+                if n_prev_trials == 0:
+                    task_done = False
+                else:
+                    if i_trial > n_prev_trials:
+                        pass
+                    else:
+                        if study.trials_dataframe().loc[i_trial-1, 'value'][0] is None:
+                            task_done = False
+                        elif np.isnan(study.trials_dataframe().loc[i_trial-1, 'value'][0]):
+                            task_done = False
+                        else:
+                            task_done = True
+                if i_trial > n_prev_trials:
+                    trial_id = study._storage.create_new_trial(study.study_id)
+                    trial = trial_module.Trial(study, trial_id)
+                    trial_number = trial.number
+                    param_dict = self.create_params(trial)
+                    res = self.obj_task(**param_dict)
+                    res_output = yield res
+                elif i_trial >= n_prev_trials and (not task_done):
+                    trial_id = i_trial
+                    trial = trial_module.Trial(study, trial_id)
+                    trial_number = trial.number
+
+                    param_dict = self.create_params(trial)
+                    res = self.obj_task(**param_dict)
+                    res_output = yield res
+                    try:
+                        result = float(res_output.open('r').read())
+                        print(result, param_dict)
+                    except structs.TrialPruned as e:
+                        message = 'Setting status of trial#{} as {}. {}'.format(trial_number,
+                                                                                structs.TrialState.PRUNED,
+                                                                                str(e))
+                        study.logger.info(message)
+                        study._storage.set_trial_state(trial_id, structs.TrialState.PRUNED)
+                    except catch as e:
+                        message = 'Setting status of trial#{} as {} because of the following error: {}'\
+                            .format(trial_number, structs.TrialState.FAIL, repr(e))
+                        study.logger.warning(message, exc_info=True)
+                        study._storage.set_trial_system_attr(trial_id, 'fail_reason', message)
+                        study._storage.set_trial_state(trial_id, structs.TrialState.FAIL)
+                    finally:
+                        # The following line mitigates memory problems that can be occurred in some
+                        # environments (e.g., services that use computing containers such as CircleCI).
+                        # Please refer to the following PR for further details:
+                        # https://github.com/pfnet/optuna/pull/325.
+                        gc.collect()
+
+                    try:
+                        result = float(result)
+                    except (
+                            ValueError,
+                            TypeError,
+                    ):
+                        message = 'Setting status of trial#{} as {} because the returned value from the ' \
+                                  'objective function cannot be casted to float. Returned value is: ' \
+                                  '{}'.format(trial_number, structs.TrialState.FAIL, repr(result))
+                        study.logger.warning(message)
+                        study._storage.set_trial_system_attr(trial_id, 'fail_reason', message)
+                        study._storage.set_trial_state(trial_id, structs.TrialState.FAIL)
+
+                    if math.isnan(result):
+                        message = 'Setting status of trial#{} as {} because the objective function ' \
+                                  'returned {}.'.format(trial_number, structs.TrialState.FAIL, result)
+                        study.logger.warning(message)
+                        study._storage.set_trial_system_attr(trial_id, 'fail_reason', message)
+                        study._storage.set_trial_state(trial_id, structs.TrialState.FAIL)
+
+                    trial.report(result)
+                    study._storage.set_trial_state(trial_id, structs.TrialState.COMPLETE)
+                    study._log_completed_trial(trial_number, result)
+
+                    if callbacks is not None:
+                        frozen_trial = study._storage.get_trial(trial._trial_id)
+                        for callback in callbacks:
+                            callback(study, frozen_trial)                    
+                else:
+                    pass
+                
+        finally:
+            study._optimize_lock.release()
+
+        #study.optimize(self.objective, n_trials=self.n_trials, n_jobs=1)
         best_params_str = pprint.pformat(study.best_params)
         logger.info(f'''
 =====================================
@@ -246,7 +373,7 @@ best_value:\t{study.best_value}
         '''
         param_dict = self.create_params(trial)
         res = self.obj_task(**param_dict)
-        luigi.build([res])
+        luigi.build([res], workers=1)
         try:
             val = float(res.output().open('r').read())
         except:

@@ -42,3 +42,22 @@ def sort_dict(input_dict):
         return OrderedDict(sorted(_input_dict.items(), key=lambda t: t[0]))
     else:
         return _input_dict
+
+
+def checksum(file_path):
+    ''' compute md5checksum of the file
+
+    Parameters
+    ----------
+    file_path : str
+        a path to the file whose md5checksum is computed
+
+    Returns
+    -------
+    str : md5checksum
+    '''
+    md5 = hashlib.md5()
+    with open(file_path, 'rb') as f:
+        for chunk in iter(lambda: f.read(4096 * md5.block_size), b''):
+            md5.update(chunk)
+    return md5.hexdigest()
