@@ -266,7 +266,7 @@ class OptunaTask(AutoNamingTask):
                     res_output = yield res
                     try:
                         result = float(res_output.open('r').read())
-                        print(result, param_dict)
+                        #print(result, param_dict)
                     except structs.TrialPruned as e:
                         message = 'Setting status of trial#{} as {}. {}'.format(trial_number,
                                                                                 structs.TrialState.PRUNED,
