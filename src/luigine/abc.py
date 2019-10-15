@@ -174,10 +174,15 @@ class AutoNamingTask(luigi.Task):
             res = pickle.load(f)
         return res
 
+    def save_output(self, obj):
+        with gzip.open(self.output().path, 'wb') as f:
+            pickle.dump(obj, f)
+
     def input_file(self):
         ''' return a list of input file paths
         '''
         return []
+
 
 class OptunaTask(AutoNamingTask):
 
@@ -199,7 +204,7 @@ class OptunaTask(AutoNamingTask):
     output_ext = luigi.Parameter(default='db')
     OptunaTask_params = luigi.DictParameter()
     n_trials = luigi.IntParameter(default=100)
-    working_subdir = luigi.Parameter(default='optuna')
+    working_subdir = luigi.Parameter(default='_optuna')
 
     def obj_task(self):
         ''' return a `luigi.Task` instance, which, given a set of parameters in dict, returns a `loss` to be minimized.
@@ -387,7 +392,8 @@ best_value:\t{study.best_value}
                                   storage=f'sqlite:///{self.output().path}')
         return study
 
-    def get_best_params(self):
+    @property
+    def best_params(self):
         study = self.load_output()
 
         def _create_subparams(study, param_dict):
@@ -401,3 +407,8 @@ best_value:\t{study.best_value}
                     out_param_dict[each_key] = each_val
             return out_param_dict
         return _create_subparams(study, self.OptunaTask_params)
+
+    @property
+    def best_value(self):
+        study = self.load_output()
+        return study.best_value
