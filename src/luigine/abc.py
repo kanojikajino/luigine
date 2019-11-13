@@ -122,12 +122,18 @@ class AutoNamingTask(luigi.Task):
 
     __no_hash_keys__ = []
     hash_num = luigi.IntParameter(default=10)
+    use_mlflow = luigi.BoolParameter(default=False)
     working_subdir = luigi.Parameter()
     output_ext = luigi.Parameter(default='pklz')
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.param_name = ""
+        if self.use_mlflow:
+            import mlflow
+            if mlflow.active_run() is None:
+                mlflow.set_experiment(self.__class__.__name__)
+                mlflow.start_run()
 
         # md5checksum of input files
         if self.input_file():
