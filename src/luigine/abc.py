@@ -123,6 +123,7 @@ class AutoNamingTask(luigi.Task):
     __no_hash_keys__ = []
     hash_num = luigi.IntParameter(default=10)
     use_mlflow = luigi.BoolParameter(default=False)
+    remove_output_file = luigi.BoolParameter(default=False)
     working_subdir = luigi.Parameter()
     output_ext = luigi.Parameter(default='pklz')
 
@@ -178,11 +179,17 @@ class AutoNamingTask(luigi.Task):
     def load_output(self):
         with gzip.open(self.output().path, 'rb') as f:
             res = pickle.load(f)
+        if self.remove_output_file:
+            self.remove_output()
         return res
 
     def save_output(self, obj):
         with gzip.open(self.output().path, 'wb') as f:
             pickle.dump(obj, f)
+
+    def remove_output(self):
+        if os.path.exists(self.output().path):
+            os.remove(self.output().path)
 
     def input_file(self):
         ''' return a list of input file paths
