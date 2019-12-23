@@ -71,3 +71,8 @@ class UtcDateHourParameter(luigi.DateHourParameter):
                          start=start if start is not None \
                          else datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc),
                          **kwargs)
+    def parse(self, s):
+        """
+        Parses a date string formatted like ``YYYY-MM-DD``.
+        """
+        return datetime.datetime.strptime(s, self.date_format).replace(tzinfo=datetime.timezone.utc)
