@@ -124,7 +124,6 @@ class AutoNamingTask(luigi.Task):
     hash_num = luigi.IntParameter(default=10)
     use_mlflow = luigi.BoolParameter(default=False)
     remove_output_file = luigi.BoolParameter(default=False)
-    working_subdir = luigi.Parameter()
     output_ext = luigi.Parameter(default='pklz')
 
     def __init__(self, **kwargs):
@@ -196,6 +195,10 @@ class AutoNamingTask(luigi.Task):
         '''
         return []
 
+    @property
+    def working_subdir(self):
+        return self.__class__.__name__
+
 
 class OptunaTask(AutoNamingTask):
 
@@ -217,7 +220,6 @@ class OptunaTask(AutoNamingTask):
     output_ext = luigi.Parameter(default='db')
     OptunaTask_params = luigi.DictParameter()
     n_trials = luigi.IntParameter(default=100)
-    working_subdir = luigi.Parameter(default='_optuna')
 
     def obj_task(self):
         ''' return a `luigi.Task` instance, which, given a set of parameters in dict, returns a `loss` to be minimized.

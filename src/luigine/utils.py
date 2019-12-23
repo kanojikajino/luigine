@@ -5,6 +5,7 @@ __author__ = "Hiroshi Kajino"
 __copyright__ = "(c) Copyright IBM Corp. 2019"
 __version__ = "1.0"
 
+import datetime
 from copy import deepcopy
 from collections import OrderedDict
 import hashlib
@@ -61,3 +62,12 @@ def checksum(file_path):
         for chunk in iter(lambda: f.read(4096 * md5.block_size), b''):
             md5.update(chunk)
     return md5.hexdigest()
+
+
+class UtcDateHourParameter(luigi.DateHourParameter):
+
+    def __init__(self, interval=1, start=None, **kwargs):
+        super().__init__(interval=interval,
+                         start=start if start is not None \
+                         else datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc),
+                         **kwargs)
