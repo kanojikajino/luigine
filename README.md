@@ -44,27 +44,32 @@ and the results (sqlite db) are stored under `example_working_dir/OUTPUT/optuna`
 Log is stored in `ENGLOG/engine.log`
 
 
-## Difference from luigi
-Task in luigi has three methods to be implemented, `requires`, `output`, and `run`.
-In luigine, `output` is already defined in `AutoNamingTask`, and the user does not have to implement it (note that the file extension can be defined by setting a class variable `output_ext = luigi.Parameter('[your file extension]')` in a task class).
+## How To Use `AutoNamingTask`
 
-Luigine requires us to implement `load_output`, that returns the output object resulting from executing the task.
-By this feature, a code block loading the dependent task's output,
-```
-with gzip.open(self.input().path, 'rb') as f:
-    obj = pickle.load(f)
-```
-could be simplified into the following,
-```
-obj = self.requires().load_output()
-```
-where the dependent task has method `load_output` such as
-```
-def load_output(self):
-    with gzip.open(self.input().path, 'rb') as f:
-        obj = pickle.load(f)
-    return obj
-```
+1. All tasks must inherit `AutoNamingTask`, instead of `luigi.Task`.
+1. Task dependencies are described in `requires` in the same way as `luigi`, except that `requires` must return a **list** of task instances even if it depends on a single task.
+1. Task process should be described in `run_task` (instead of `run`), whose
+   - input is `input_list`, a list of output Python objects of dependent tasks, and
+   - output is Python objects of this task's computation results.
+1. The above Python objects are then processed by `save_output` to be pickled and gzipped.
+   - If the user wants to choose other data formats, please implement `save_output` and `load_output`, where `save_output` is used to save the output objects of `run_task`, and `load_output` is used to load the Python objects for further processing.
+   - A class variable `output_ext` specifies the file extension.
+   - Please set it as `output_ext = luigi.Parameter('[your file extension]')`
+
+
+## How To Use `OptunaTask`
+
+1. Implement a task that outputs a text file containing a function value (eg, `PerformanceEvaluation` in `example.py`)
+   - This task represents the black-box function to be minimized, whose input is a set of task parameters and output is a score to be minimized (in the above example, MSE is the score).
+1. Implement a black-box optimization task by inheriting `OptunaTask`, and implement `obj_task`, which returns an instance of the above task.
+   - `obj_task` receives a set of task parameters as `kwargs`
+   - Task parameters to be tuned are specified in `param.py`. Those who have prefix `@` are tuned by optuna.
+   - In `example_working_dir/INPUT/param.py`, `alpha` and `fit_intercept` are tuned.
+   - When tuning, the corresponding value must be list of two objects, where
+	 - the first one is a string specifying which suggest method in optuna is used (see `suggest_*` methods in https://optuna.readthedocs.io/en/latest/reference/trial.html
+	 - the second one specifies the suggest method's inputs
+1. The output objects of the optimization task is a tuple of `optuna.study` object and the best set of task parameters.
+
 
 # Collaborators
 - Hiroshi Kajino
