@@ -161,6 +161,14 @@ class AutoNamingTask(luigi.Task):
                                   + hashlib.md5(str(param_kwargs[each_key]).encode("utf-8")).hexdigest()[:self.hash_num] + "_"
         self.param_name = self.param_name[:-1]
 
+    @abstractmethod
+    def run_task(self, input_list):
+        raise NotImplementedError
+
+    def run(self):
+        res = self.run_task([each_task.load_output() for each_task in self.requires()])
+        self.save_output(res)
+
     def output(self):
         if not os.path.exists('OUTPUT'):
             os.mkdir('OUTPUT')
