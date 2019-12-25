@@ -48,12 +48,11 @@ logger = logging.getLogger('luigi-interface')
 class DataPreprocessing(AutoNamingTask):
 
     DataPreprocessing_params = luigi.DictParameter()
-    working_subdir = luigi.Parameter(default='data_prep')
 
     def requires(self):
         return []
 
-    def run(self):
+    def run_task(self, input_list):
         w = np.random.randn(self.DataPreprocessing_params['in_dim'])
         X_train = np.random.randn(self.DataPreprocessing_params['train_size'],
                                   self.DataPreprocessing_params['in_dim'])
@@ -64,29 +63,24 @@ class DataPreprocessing(AutoNamingTask):
         y_train = X_train @ w
         y_val = X_val @ w
         y_test = X_test @ w
-
-        with gzip.open(self.output().path, 'wb') as f:
-            pickle.dump((X_train, y_train,
-                         X_val, y_val,
-                         X_test, y_test), f)
-
+        return (X_train, y_train,
+                X_val, y_val,
+                X_test, y_test)
 
 
 class Train(AutoNamingTask):
 
     DataPreprocessing_params = luigi.DictParameter()
     Train_params = luigi.DictParameter()
-    working_subdir = luigi.Parameter(default='train')
 
     def requires(self):
-        return DataPreprocessing(DataPreprocessing_params=self.DataPreprocessing_params)
+        return [DataPreprocessing(DataPreprocessing_params=self.DataPreprocessing_params)]
 
-    def run(self):
-        X_train, y_train, _, _, _, _ = self.requires().load_output()
+    def run_task(self, input_list):
+        X_train, y_train, _, _, _, _ = input_list[0]
         model = Ridge(**self.Train_params['model_kwargs'])
         model.fit(X_train, y_train)
-        with gzip.open(self.output().path, 'wb') as f:
-            pickle.dump(model, f)
+        return model
 
 
 class PerformanceEvaluation(MainTask, AutoNamingTask):
@@ -98,22 +92,27 @@ class PerformanceEvaluation(MainTask, AutoNamingTask):
     DataPreprocessing_params = luigi.DictParameter(default=DataPreprocessing_params)
     Train_params = luigi.DictParameter(default=Train_params)
     PerformanceEvaluation_params = luigi.DictParameter(default=PerformanceEvaluation_params)
-    working_subdir = luigi.Parameter(default='eval')
 
     def requires(self):
         return [DataPreprocessing(DataPreprocessing_params=self.DataPreprocessing_params),
                 Train(DataPreprocessing_params=self.DataPreprocessing_params,
                       Train_params=self.Train_params)]
 
-    def run(self):
-        _input = self.requires()
-        _, _, X_val, y_val, _, _ = _input[0].load_output()
-        model = _input[1].load_output()
+    def run_task(self, input_list):
+        _, _, X_val, y_val, _, _ = input_list[0]
+        model = input_list[1]
         y_pred = model.predict(X_val)
         mse = mean_squared_error(y_val, y_pred)
+        return mse
 
+    def save_output(self, mse):
         with open(self.output().path, 'w') as f:
             f.write(f'{mse}')
+
+    def load_output(self):
+        with open(self.output().path, 'w') as f:
+            mse = f.read()
+        return mse
 
 
 class HyperparameterOptimization(OptunaTask, MainTask):
@@ -136,7 +135,6 @@ class TestPerformanceEvaluation(MainTask, AutoNamingTask):
     output_ext = luigi.Parameter(default='txt')
     OptunaTask_params = luigi.DictParameter(default=HyperparameterOptimization_params)
     n_trials = luigi.IntParameter()
-    working_subdir = luigi.Parameter(default='test_performance')
 
     def requires(self):
         return [DataPreprocessing(DataPreprocessing_params=self.OptunaTask_params['DataPreprocessing_params']),
@@ -144,10 +142,9 @@ class TestPerformanceEvaluation(MainTask, AutoNamingTask):
                                            n_trials=self.n_trials,
                                            working_dir=self.working_dir)]
 
-    def run(self):
-        _input = self.requires()
-        _, _, _, _, X_test, y_test = _input[0].load_output()
-        best_params = _input[1].get_best_params()
+    def run_task(self, input_list):
+        _, _, _, _, X_test, y_test = input_list[0]
+        _, best_params = input_list[1]
         get_model_task = Train(DataPreprocessing_params=best_params['DataPreprocessing_params'],
                                Train_params=best_params['Train_params'])
         luigi.build([get_model_task])
@@ -161,10 +158,17 @@ test_mse = {mse}
 ===================
 
 ''')
+        return mse
 
+    def save_output(self, mse):
         with open(self.output().path, 'w') as f:
             f.write(f'{mse}')
-        
+
+    def load_output(self):
+        with open(self.output().path, 'w') as f:
+            mse = f.read()
+        return mse
+
 
 if __name__ == "__main__":
     for each_engine_status in glob.glob("./engine_status.*"):

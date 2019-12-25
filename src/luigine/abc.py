@@ -167,7 +167,8 @@ class AutoNamingTask(luigi.Task):
 
     def run(self):
         res = self.run_task([each_task.load_output() for each_task in self.requires()])
-        self.save_output(res)
+        if res is not None:
+            self.save_output(res)
 
     def output(self):
         if not os.path.exists('OUTPUT'):
@@ -233,6 +234,9 @@ class OptunaTask(AutoNamingTask):
         ''' return a `luigi.Task` instance, which, given a set of parameters in dict, returns a `loss` to be minimized.
         '''
         raise NotImplementedError
+
+    def run_task(self, input_list):
+        pass
 
     def run(self):
         ''' non-negligible part of this function was copied from optuna code distributed under MIT license.
@@ -356,6 +360,7 @@ best_params:\n{best_params_str}
 best_value:\t{study.best_value}
 =====================================
         ''')
+        return None
 
     def create_params(self, trial):
         ''' create a dictionary of parameters for `obj_task` given a trial
@@ -409,15 +414,19 @@ best_value:\t{study.best_value}
             
         return val
 
-    def load_output(self):
+    def load_study(self):
         study_name = os.path.splitext(os.path.basename(self.output().path))[0]
         study = optuna.load_study(study_name=study_name,
                                   storage=f'sqlite:///{self.output().path}')
         return study
 
+    def load_output(self):
+        study = self.load_study()
+        return study, self.best_params
+
     @property
     def best_params(self):
-        study = self.load_output()
+        study = self.load_study()
 
         def _create_subparams(study, param_dict):
             out_param_dict = dict()
@@ -433,5 +442,5 @@ best_value:\t{study.best_value}
 
     @property
     def best_value(self):
-        study = self.load_output()
+        study = self.load_study()
         return study.best_value
