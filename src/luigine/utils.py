@@ -66,6 +66,11 @@ def checksum(file_path):
 
 class UtcDateHourParameter(luigi.DateHourParameter):
 
+    ''' DateHourParameter in UTC timezone
+    The object must be datetime object with UTC timezone information.
+     ** not pandas.Timestamp or other ones **
+    '''
+
     def __init__(self, interval=1, start=None, **kwargs):
         super().__init__(interval=interval,
                          start=start if start is not None \

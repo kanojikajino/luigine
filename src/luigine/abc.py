@@ -166,6 +166,8 @@ class AutoNamingTask(luigi.Task):
         raise NotImplementedError
 
     def run(self):
+        if not isinstance(self.requires(), list):
+            raise ValueError('self.requires must return a list of tasks.')
         res = self.run_task([each_task.load_output() for each_task in self.requires()])
         if res is not None:
             self.save_output(res)
