@@ -5,7 +5,6 @@ __author__ = "Hiroshi Kajino"
 __copyright__ = "(c) Copyright IBM Corp. 2019"
 __version__ = "1.0"
 
-import datetime
 from copy import deepcopy
 from collections import OrderedDict
 import hashlib
@@ -37,9 +36,9 @@ def sort_dict(input_dict):
         return input_dict
     _input_dict = deepcopy(dict(input_dict))
     for each_key, each_value in _input_dict.items():
-        if isinstance(each_value, (dict, OrderedDict, luigi.parameter._FrozenOrderedDict)):
+        if isinstance(each_value, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
             _input_dict[each_key] = sort_dict(_input_dict[each_key])
-    if isinstance(_input_dict, (dict, OrderedDict, luigi.parameter._FrozenOrderedDict)):
+    if isinstance(_input_dict, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
         return OrderedDict(sorted(_input_dict.items(), key=lambda t: t[0]))
     else:
         return _input_dict
@@ -62,22 +61,3 @@ def checksum(file_path):
         for chunk in iter(lambda: f.read(4096 * md5.block_size), b''):
             md5.update(chunk)
     return md5.hexdigest()
-
-
-class UtcDateHourParameter(luigi.DateHourParameter):
-
-    ''' DateHourParameter in UTC timezone
-    The object must be datetime object with UTC timezone information.
-     ** not pandas.Timestamp or other ones **
-    '''
-
-    def __init__(self, interval=1, start=None, **kwargs):
-        super().__init__(interval=interval,
-                         start=start if start is not None \
-                         else datetime.datetime.fromtimestamp(0, tz=datetime.timezone.utc),
-                         **kwargs)
-    def parse(self, s):
-        """
-        Parses a date string formatted like ``YYYY-MM-DD``.
-        """
-        return datetime.datetime.strptime(s, self.date_format).replace(tzinfo=datetime.timezone.utc)

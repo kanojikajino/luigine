@@ -1,4 +1,4 @@
-luigi
+luigi>=2.8.11
 numpy
 optuna
 sklearn

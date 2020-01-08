@@ -151,7 +151,7 @@ class AutoNamingTask(luigi.Task):
                 self.param_name = self.param_name + str(param_kwargs[each_key]) + "_"
                 param_kwargs.pop(each_key)
         for each_key in sorted(param_kwargs.keys()):
-            if isinstance(param_kwargs[each_key], (dict, OrderedDict, luigi.parameter._FrozenOrderedDict)):
+            if isinstance(param_kwargs[each_key], (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
                 self.param_name \
                     = self.param_name \
                     + hashlib.md5(dict_to_str(sort_dict(param_kwargs[each_key]))\
@@ -381,7 +381,7 @@ best_value:\t{study.best_value}
         def _create_subparams(trial, param_dict):
             out_param_dict = dict()
             for each_key, each_val in param_dict.items():
-                if isinstance(each_val, (dict, OrderedDict, luigi.parameter._FrozenOrderedDict)):
+                if isinstance(each_val, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
                     out_param_dict[each_key] = _create_subparams(trial, each_val)
                 elif each_key.startswith('@'):
                     out_param_dict[each_key[1:]] = getattr(
@@ -433,7 +433,7 @@ best_value:\t{study.best_value}
         def _create_subparams(study, param_dict):
             out_param_dict = dict()
             for each_key, each_val in param_dict.items():
-                if isinstance(each_val, (dict, OrderedDict, luigi.parameter._FrozenOrderedDict)):
+                if isinstance(each_val, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
                     out_param_dict[each_key] = _create_subparams(study, each_val)
                 elif each_key.startswith('@'):
                     out_param_dict[each_key[1:]] = study.best_params[each_key[1:]]
