@@ -5,24 +5,24 @@ __author__ = "Hiroshi Kajino, Takeshi Teshima"
 __copyright__ = "(c) Copyright IBM Corp. 2019"
 __version__ = "1.0"
 
-from abc import abstractmethod
-from copy import deepcopy
-from collections import OrderedDict
-from optuna import trial as trial_module
-from optuna import structs
 import datetime
 import errno
 import gc
 import gzip
 import hashlib
-import logging
-import luigi
 import math
-import numpy as np
-import optuna
 import os
 import pickle
 import pprint
+import shutil
+from copy import deepcopy
+from collections import OrderedDict
+import logging
+from optuna import trial as trial_module
+from optuna import structs
+import optuna
+import luigi
+import numpy as np
 from .utils import sort_dict, dict_to_str, checksum
 
 logger = logging.getLogger('luigi-interface')
@@ -54,8 +54,10 @@ def main():
                                 os.path.join("INPUT", "luigi.cfg"))
 
     # mkdir if not exists
-    if not os.path.exists(os.path.join("ENGLOG")): os.mkdir(os.path.join("ENGLOG"))
-    if not os.path.exists(os.path.join("OUTPUT")): os.mkdir(os.path.join("OUTPUT"))
+    if not os.path.exists(os.path.join("ENGLOG")):
+        os.mkdir(os.path.join("ENGLOG"))
+    if not os.path.exists(os.path.join("OUTPUT")):
+        os.mkdir(os.path.join("OUTPUT"))
 
     os.rename("engine_status.ready", "engine_status.progress")
     with open("engine_status.progress", "a") as f:
@@ -124,6 +126,7 @@ class AutoNamingTask(luigi.Task):
     hash_num = luigi.IntParameter(default=10)
     use_mlflow = luigi.BoolParameter(default=False)
     remove_output_file = luigi.BoolParameter(default=False)
+    copy_output_to_top = luigi.Parameter(default='')
     output_ext = luigi.Parameter(default='pklz')
 
     def __init__(self, **kwargs):
@@ -141,7 +144,8 @@ class AutoNamingTask(luigi.Task):
                 self.param_name = self.param_name + checksum(each_input_file)[:self.hash_num] + '_'
 
         param_kwargs = deepcopy(self.__dict__["param_kwargs"])
-        if "working_subdir" in param_kwargs: param_kwargs.pop("working_subdir")
+        if "working_subdir" in param_kwargs:
+            param_kwargs.pop("working_subdir")
         for each_key in self.__no_hash_keys__:
             if len(each_key) == 2:
                 self.param_name = self.param_name + str(param_kwargs[each_key[0]][each_key[1]]) + "_"
@@ -161,16 +165,28 @@ class AutoNamingTask(luigi.Task):
                                   + hashlib.md5(str(param_kwargs[each_key]).encode("utf-8")).hexdigest()[:self.hash_num] + "_"
         self.param_name = self.param_name[:-1]
 
-    @abstractmethod
     def run_task(self, input_list):
         raise NotImplementedError
 
     def run(self):
         if not isinstance(self.requires(), list):
             raise ValueError('self.requires must return a list of tasks.')
-        res = self.run_task([each_task.load_output() for each_task in self.requires()])
+
+        input_list = [each_task.load_output() for each_task in self.requires()]
+        valid_input = self.check_input(input_list)
+        if not valid_input:
+            raise ValueError('input format is not valid.')
+
+        res = self.run_task(input_list)
+
+        valid_output = self.check_output(res)
+        if not valid_output:
+            raise ValueError('output format is not valid.')
+
         if res is not None:
             self.save_output(res)
+        if self.copy_output_to_top != '':
+            shutil.copy(self.output().path, os.path.join('OUTPUT', self.copy_output_to_top))
 
     def output(self):
         if not os.path.exists('OUTPUT'):
@@ -196,6 +212,16 @@ class AutoNamingTask(luigi.Task):
     def save_output(self, obj):
         with gzip.open(self.output().path, 'wb') as f:
             pickle.dump(obj, f)
+
+    def check_input(self, input_list):
+        ''' check the input format
+        '''
+        return True
+
+    def check_output(self, res):
+        ''' check the output format
+        '''
+        return True
 
     def remove_output(self):
         if os.path.exists(self.output().path):
