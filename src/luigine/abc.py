@@ -18,6 +18,7 @@ import shutil
 from copy import deepcopy
 from collections import OrderedDict
 import logging
+import mlflow
 from optuna import trial as trial_module
 from optuna import structs
 import optuna
@@ -133,7 +134,6 @@ class AutoNamingTask(luigi.Task):
         super().__init__(**kwargs)
         self.param_name = ""
         if self.use_mlflow:
-            import mlflow
             if mlflow.active_run() is None:
                 mlflow.set_experiment(self.__class__.__name__)
                 mlflow.start_run()
@@ -212,6 +212,8 @@ class AutoNamingTask(luigi.Task):
     def save_output(self, obj):
         with gzip.open(self.output().path, 'wb') as f:
             pickle.dump(obj, f)
+        if self.use_mlflow:
+            mlflow.log_artifact(self.output().path)
 
     def check_input(self, input_list):
         ''' check the input format
