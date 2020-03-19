@@ -10,13 +10,13 @@ Library for developing an engine using luigi. Key features are:
 ## Dependency
 - luigi
 - numpy
-- optuna
+- optuna>=1.2.0
 - sklearn
 
 ## Installation
 
 ```
-python setup.py install
+pip install .
 ```
 
 ## Example

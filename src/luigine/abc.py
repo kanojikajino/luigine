@@ -10,6 +10,7 @@ import errno
 import gc
 import gzip
 import hashlib
+import logging
 import math
 import os
 import pickle
@@ -17,12 +18,12 @@ import pprint
 import shutil
 from copy import deepcopy
 from collections import OrderedDict
-import logging
-from optuna import trial as trial_module
-from optuna import structs
-import optuna
 import luigi
 import numpy as np
+from optuna import exceptions
+from optuna import structs
+from optuna import trial as trial_module
+import optuna
 from .utils import sort_dict, dict_to_str, checksum
 
 logger = logging.getLogger('luigi-interface')
@@ -273,13 +274,13 @@ class OptunaTask(AutoNamingTask):
         '''
         study_name = os.path.splitext(os.path.basename(self.output().path))[0]
         study = optuna.create_study(study_name=study_name, storage=f'sqlite:///{self.output().path}',
-                                         load_if_exists=True)
+                                    load_if_exists=True)
+            
         n_prev_trials = len(study.trials)
         n_trials = self.n_trials
         timeout = None
         catch = (Exception, )
-        callbacks = None
-
+        gc_after_trial = True
         if not study._optimize_lock.acquire(False):
             raise RuntimeError("Nested invocation of `Study.optimize` method isn't allowed.")
 
@@ -303,14 +304,16 @@ class OptunaTask(AutoNamingTask):
                     if i_trial > n_prev_trials:
                         pass
                     else:
-                        if study.trials_dataframe().loc[i_trial-1, 'value'][0] is None:
+                        if study.trials_dataframe().loc[i_trial-1, 'value'] is None:
                             task_done = False
-                        elif np.isnan(study.trials_dataframe().loc[i_trial-1, 'value'][0]):
+                        elif np.isnan(study.trials_dataframe().loc[i_trial-1, 'value']):
                             task_done = False
                         else:
                             task_done = True
                 if i_trial > n_prev_trials:
-                    trial_id = study._storage.create_new_trial(study.study_id)
+                    trial_id = study._pop_waiting_trial_id()
+                    if trial_id is None:
+                        trial_id = study._storage.create_new_trial(study._study_id)
                     trial = trial_module.Trial(study, trial_id)
                     trial_number = trial.number
                     param_dict = self.create_params(trial)
@@ -326,25 +329,34 @@ class OptunaTask(AutoNamingTask):
                     res_output = yield res
                     try:
                         result = float(res_output.open('r').read())
-                        #print(result, param_dict)
-                    except structs.TrialPruned as e:
+                    except exceptions.TrialPruned as e:
                         message = 'Setting status of trial#{} as {}. {}'.format(trial_number,
                                                                                 structs.TrialState.PRUNED,
                                                                                 str(e))
-                        study.logger.info(message)
+                        logger.info(message)
+
+                        # Register the last intermediate value if present as the value of the trial.
+                        # TODO(hvy): Whether a pruned trials should have an actual value can be discussed.
+                        frozen_trial = study._storage.get_trial(trial_id)
+                        last_step = frozen_trial.last_step
+                        if last_step is not None:
+                            study._storage.set_trial_value(
+                                trial_id, frozen_trial.intermediate_values[last_step])
                         study._storage.set_trial_state(trial_id, structs.TrialState.PRUNED)
-                    except catch as e:
+                    except Exception as e:
                         message = 'Setting status of trial#{} as {} because of the following error: {}'\
                             .format(trial_number, structs.TrialState.FAIL, repr(e))
-                        study.logger.warning(message, exc_info=True)
+                        logger.warning(message, exc_info=True)
                         study._storage.set_trial_system_attr(trial_id, 'fail_reason', message)
                         study._storage.set_trial_state(trial_id, structs.TrialState.FAIL)
+                        raise
                     finally:
                         # The following line mitigates memory problems that can be occurred in some
                         # environments (e.g., services that use computing containers such as CircleCI).
                         # Please refer to the following PR for further details:
-                        # https://github.com/pfnet/optuna/pull/325.
-                        gc.collect()
+                        # https://github.com/optuna/optuna/pull/325.
+                        if gc_after_trial:
+                            gc.collect()
 
                     try:
                         result = float(result)
@@ -355,32 +367,28 @@ class OptunaTask(AutoNamingTask):
                         message = 'Setting status of trial#{} as {} because the returned value from the ' \
                                   'objective function cannot be casted to float. Returned value is: ' \
                                   '{}'.format(trial_number, structs.TrialState.FAIL, repr(result))
-                        study.logger.warning(message)
+                        logger.warning(message)
                         study._storage.set_trial_system_attr(trial_id, 'fail_reason', message)
                         study._storage.set_trial_state(trial_id, structs.TrialState.FAIL)
+                        return trial
 
                     if math.isnan(result):
                         message = 'Setting status of trial#{} as {} because the objective function ' \
                                   'returned {}.'.format(trial_number, structs.TrialState.FAIL, result)
-                        study.logger.warning(message)
+                        logger.warning(message)
                         study._storage.set_trial_system_attr(trial_id, 'fail_reason', message)
                         study._storage.set_trial_state(trial_id, structs.TrialState.FAIL)
+                        return trial
 
-                    trial.report(result)
+                    study._storage.set_trial_value(trial_id, result)
                     study._storage.set_trial_state(trial_id, structs.TrialState.COMPLETE)
                     study._log_completed_trial(trial_number, result)
-
-                    if callbacks is not None:
-                        frozen_trial = study._storage.get_trial(trial._trial_id)
-                        for callback in callbacks:
-                            callback(study, frozen_trial)                    
-                else:
-                    pass
-                
+                    #study._progress_bar.update((datetime.datetime.now() - time_start).total_seconds())
+            study._storage.remove_session()
         finally:
             study._optimize_lock.release()
-
-        #study.optimize(self.objective, n_trials=self.n_trials, n_jobs=1)
+            #study._progress_bar.close()
+            #del study._progress_bar
         best_params_str = pprint.pformat(study.best_params)
         logger.info(f'''
 =====================================

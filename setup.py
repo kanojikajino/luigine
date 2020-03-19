@@ -13,7 +13,7 @@ def _requires_from_file(filename):
 
 setup(
     name = 'luigine',
-    version = '1.0',
+    version = '1.1',
     author = 'Hiroshi Kajino',
     url='https://github.com/kanojikajino/luigine',
     author_email='hiroshi.kajino.1989@gmail.com',

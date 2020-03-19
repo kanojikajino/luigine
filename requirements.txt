@@ -1,4 +1,4 @@
 luigi>=2.8.11
 numpy
-optuna
+optuna>=1.2.0
 sklearn
