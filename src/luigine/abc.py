@@ -18,14 +18,7 @@ import pprint
 import shutil
 from copy import deepcopy
 from collections import OrderedDict
-<<<<<<< HEAD
-=======
-import logging
 import mlflow
-from optuna import trial as trial_module
-from optuna import structs
-import optuna
->>>>>>> a2393c1ee444ff3cdff3c9a30253e51df5eadefa
 import luigi
 import numpy as np
 from optuna import exceptions
@@ -288,7 +281,6 @@ class OptunaTask(AutoNamingTask):
         n_prev_trials = len(study.trials)
         n_trials = self.n_trials
         timeout = None
-        catch = (Exception, )
         gc_after_trial = True
         if not study._optimize_lock.acquire(False):
             raise RuntimeError("Nested invocation of `Study.optimize` method isn't allowed.")
