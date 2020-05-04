@@ -33,13 +33,13 @@ logger = logging.getLogger('luigi-interface')
 @luigi.Task.event_handler(luigi.Event.FAILURE)
 @luigi.Task.event_handler(luigi.Event.BROKEN_TASK)
 def curse_failure(*kwargs):
-    if os.path.exists("engine_status.progress"):
-        os.rename("engine_status.progress", "engine_status.error")
-    with open("engine_status.error", "a") as f:
-        f.write("error: {}\n".format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
+    #if os.path.exists("engine_status.progress"):
+    #    os.rename("engine_status.progress", "engine_status.error")
+    #with open("engine_status.error", "a") as f:
+    #    f.write("error: {}\n".format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
     with open(os.path.join("ENGLOG", "engine.log"), "a") as f:
         f.write("{}".format(kwargs))
-    raise RuntimeError('error occurs and halt.')
+    #raise RuntimeError('error occurs and halt.')
 
 
 def main():
