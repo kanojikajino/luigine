@@ -67,7 +67,10 @@ def main():
 
     # run
     try:
-        is_success = luigi.run(local_scheduler=True)
+        status_code = luigi.run(local_scheduler=True, detailed_summary=True)
+        is_success\
+            = (status_code.status == luigi.execution_summary.LuigiStatusCode.SUCCESS_WITH_RETRY\
+               or status_code.status == luigi.execution_summary.LuigiStatusCode.SUCCESS)
         if not is_success:
             raise RuntimeError('task fails')
         if os.path.exists("engine_status.progress"):
