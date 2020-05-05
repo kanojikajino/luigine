@@ -3,7 +3,6 @@
 
 __author__ = "Hiroshi Kajino"
 __copyright__ = "(c) Copyright IBM Corp. 2019"
-__version__ = "1.0"
 
 from copy import deepcopy
 from collections import OrderedDict

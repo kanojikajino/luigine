@@ -3,7 +3,6 @@
 
 __author__ = "Hiroshi Kajino, Takeshi Teshima"
 __copyright__ = "(c) Copyright IBM Corp. 2019"
-__version__ = "1.0"
 
 import datetime
 import errno
