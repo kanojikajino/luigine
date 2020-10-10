@@ -72,5 +72,5 @@ def dict_param2dict(dict_param, prefix=''):
         elif isinstance(dict_param[each_key], (list, tuple)):
             pass
         else:
-            output_dict[prefix + '' + each_key] = dict_param[each_key]
+            output_dict[prefix + '_' + each_key] = dict_param[each_key]
     return output_dict
