@@ -15,6 +15,7 @@ import os
 import pickle
 import pprint
 import shutil
+import time
 from copy import deepcopy
 from collections import OrderedDict
 import mlflow
@@ -180,7 +181,11 @@ class AutoNamingTask(luigi.Task):
         if not valid_input:
             raise ValueError('input format is not valid.')
 
+        self.start_time = time.time()
         res = self.run_task(input_list)
+        self.end_time = time.time()
+        self.elapsed_seconds = self.end_time - self.start_time
+        logger.info(' * computation time: {} sec'.format(self.elapsed_seconds))
 
         valid_output = self.check_output(res)
         if not valid_output:
