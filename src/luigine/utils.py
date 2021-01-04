@@ -60,3 +60,18 @@ def checksum(file_path):
         for chunk in iter(lambda: f.read(4096 * md5.block_size), b''):
             md5.update(chunk)
     return md5.hexdigest()
+
+
+def dict_param2dict(dict_param, prefix=''):
+    output_dict = {}
+    for each_key in dict_param:
+        if isinstance(dict_param[each_key], (dict, luigi.freezing.FrozenOrderedDict)):
+            dict_repl = dict_param2dict(
+                dict_param[each_key],
+                prefix=prefix + '_' + each_key if prefix != '' else each_key)
+            output_dict.update(dict_repl)
+        elif isinstance(dict_param[each_key], (list, tuple)):
+            pass
+        else:
+            output_dict[prefix + '_' + each_key] = dict_param[each_key]
+    return output_dict
