@@ -2,3 +2,4 @@ luigi>=2.8.11
 numpy
 optuna>=1.2.0
 sklearn
+mlflow
