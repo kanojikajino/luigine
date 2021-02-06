@@ -94,10 +94,6 @@ class MainTask(luigi.Task):
 
     working_dir = luigi.Parameter()
 
-    def load_output(self):
-        "Interface to load and return the output object."
-        pass
-
 
 class MainWrapperTask(luigi.WrapperTask):
 
@@ -106,10 +102,6 @@ class MainWrapperTask(luigi.WrapperTask):
     '''
 
     working_dir = luigi.Parameter()
-
-    def load_output(self):
-        "Interface to load and return the output object."
-        pass
 
 
 class AutoNamingTask(luigi.Task):
