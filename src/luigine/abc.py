@@ -1,11 +1,10 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-__author__ = "Hiroshi Kajino, Takeshi Teshima"
-__copyright__ = "(c) Copyright IBM Corp. 2019"
+__author__ = 'Hiroshi Kajino, Takeshi Teshima'
+__copyright__ = '(c) Copyright IBM Corp. 2019'
 
 import datetime
-import errno
 import gc
 import gzip
 import hashlib
@@ -18,8 +17,8 @@ import shutil
 import time
 from copy import deepcopy
 from collections import OrderedDict
-import mlflow
 import luigi
+from luigi.setup_logging import InterfaceLogging
 import numpy as np
 from optuna import exceptions
 from optuna import structs
@@ -30,40 +29,46 @@ from .utils import sort_dict, dict_to_str, checksum
 logger = logging.getLogger('luigi-interface')
 
 
+'''
 @luigi.Task.event_handler(luigi.Event.FAILURE)
 @luigi.Task.event_handler(luigi.Event.BROKEN_TASK)
 def curse_failure(*kwargs):
-    #if os.path.exists("engine_status.progress"):
-    #    os.rename("engine_status.progress", "engine_status.error")
-    #with open("engine_status.error", "a") as f:
-    #    f.write("error: {}\n".format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-    with open(os.path.join("ENGLOG", "engine.log"), "a") as f:
-        f.write("{}".format(kwargs))
-    #raise RuntimeError('error occurs and halt.')
+    with open(os.path.join('ENGLOG', 'engine.log'), 'a') as f:
+        f.write('{}'.format(kwargs))
+'''
 
+def main(working_dir):
+    @classmethod
+    def _cli(cls, opts):
+        """Setup logging via CLI options
 
-def main():
+        If `--background` -- set INFO level for root logger.
+        If `--logdir` -- set logging with next params:
+            default Luigi's formatter,
+            INFO level,
+            output in logdir in `luigi-server.log` file
+        """
+        logging.basicConfig(
+            level=logging.INFO,
+            filename=str(working_dir / 'ENGLOG' / 'engine.log'))
+        return True
+    InterfaceLogging._cli = _cli
+    luigi.Task.disable_window_seconds = None
+
     optuna.logging.enable_propagation()
     optuna.logging.disable_default_handler()
-    # check INPUT directory
-    if not os.path.exists(os.path.join("INPUT", "luigi.cfg")):
-        raise FileNotFoundError(errno.ENOENT,
-                                os.strerror(errno.ENOENT),
-                                os.path.join("INPUT", "luigi.cfg"))
-    if not os.path.exists(os.path.join("INPUT", "logging.conf")):
-        raise FileNotFoundError(errno.ENOENT,
-                                os.strerror(errno.ENOENT),
-                                os.path.join("INPUT", "luigi.cfg"))
 
     # mkdir if not exists
-    if not os.path.exists(os.path.join("ENGLOG")):
-        os.mkdir(os.path.join("ENGLOG"))
-    if not os.path.exists(os.path.join("OUTPUT")):
-        os.mkdir(os.path.join("OUTPUT"))
+    if not (working_dir / 'ENGLOG').exists():
+        os.mkdir(working_dir / 'ENGLOG')
+    if not (working_dir / 'OUTPUT').exists():
+        os.mkdir(working_dir / 'OUTPUT')
 
-    os.rename("engine_status.ready", "engine_status.progress")
-    with open("engine_status.progress", "a") as f:
-        f.write("progress: {}\n".format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
+    os.rename(working_dir / 'engine_status.ready',
+              working_dir / 'engine_status.progress')
+    with open(working_dir / 'engine_status.progress', 'a') as f:
+        f.write('progress: {}\n'.format(
+            datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
 
     # run
     try:
@@ -73,35 +78,20 @@ def main():
                or status_code.status == luigi.execution_summary.LuigiStatusCode.SUCCESS)
         if not is_success:
             raise RuntimeError('task fails')
-        if os.path.exists("engine_status.progress"):
-            os.rename("engine_status.progress", "engine_status.complete")
+        if (working_dir / 'engine_status.progress').exists():
+            os.rename(working_dir / 'engine_status.progress',
+                      working_dir / 'engine_status.complete')
     except:
         import traceback
-        if os.path.exists("engine_status.progress"):
+        if (working_dir / 'engine_status.progress').exists():
             # when KeyboardInterrupt occurs, curse_failure may be halted during its process.
-            os.rename("engine_status.progress", "engine_status.error")
-        with open("engine_status.error", "a") as f:
-            f.write("error: {}\n".format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-        with open(os.path.join("ENGLOG", "engine.log"), "a") as f:
+            os.rename(working_dir / 'engine_status.progress',
+                      working_dir / 'engine_status.error')
+        with open(working_dir / 'engine_status.error',
+                  'a') as f:
+            f.write('error: {}\n'.format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
+        with open(working_dir / 'ENGLOG' / 'engine.log', 'a') as f:
             f.write(traceback.format_exc())
-
-
-class MainTask(luigi.Task):
-
-    '''
-    A main task should inherit this class.
-    '''
-
-    working_dir = luigi.Parameter()
-
-
-class MainWrapperTask(luigi.WrapperTask):
-
-    '''
-    A main wrapper task should inherit this class.
-    '''
-
-    working_dir = luigi.Parameter()
 
 
 class AutoNamingTask(luigi.Task):
@@ -125,11 +115,16 @@ class AutoNamingTask(luigi.Task):
     remove_output_file = luigi.BoolParameter(default=False)
     copy_output_to_top = luigi.Parameter(default='')
     output_ext = luigi.Parameter(default='pklz')
+    working_dir = luigi.Parameter()  # used for argparse
+    _working_dir = ''  # containing full path
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.param_name = ""
+        self.param_name = ''
         if self.use_mlflow:
+            import mlflow
+            self.mlflow = mlflow
+            mlflow.set_tracking_uri(str(self._working_dir / 'mlruns'))
             if mlflow.active_run() is None:
                 mlflow.set_experiment(self.__class__.__name__)
                 mlflow.start_run()
@@ -139,26 +134,34 @@ class AutoNamingTask(luigi.Task):
             for each_input_file in self.input_file():
                 self.param_name = self.param_name + checksum(each_input_file)[:self.hash_num] + '_'
 
-        param_kwargs = deepcopy(self.__dict__["param_kwargs"])
-        if "working_subdir" in param_kwargs:
-            param_kwargs.pop("working_subdir")
+        param_kwargs = deepcopy(self.__dict__['param_kwargs'])
+        if 'working_subdir' in param_kwargs:
+            param_kwargs.pop('working_subdir')
+        if 'working_dir' in param_kwargs:
+            param_kwargs.pop('working_dir')
+        if '_working_dir' in param_kwargs:
+            param_kwargs.pop('_working_dir')
         for each_key in self.__no_hash_keys__:
             if len(each_key) == 2:
-                self.param_name = self.param_name + str(param_kwargs[each_key[0]][each_key[1]]) + "_"
+                self.param_name = self.param_name + str(param_kwargs[each_key[0]][each_key[1]]) + '_'
                 param_kwargs[each_key[0]] = dict(param_kwargs[each_key[0]])
                 param_kwargs[each_key[0]].pop(each_key[1])
             else:
-                self.param_name = self.param_name + str(param_kwargs[each_key]) + "_"
+                self.param_name = self.param_name + str(param_kwargs[each_key]) + '_'
                 param_kwargs.pop(each_key)
         for each_key in sorted(param_kwargs.keys()):
-            if isinstance(param_kwargs[each_key], (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
+            if isinstance(param_kwargs[each_key],
+                          (dict,
+                           OrderedDict,
+                           luigi.freezing.FrozenOrderedDict)):
                 self.param_name \
                     = self.param_name \
                     + hashlib.md5(dict_to_str(sort_dict(param_kwargs[each_key]))\
-                                  .encode("utf-8")).hexdigest()[:self.hash_num] + "_"
+                                  .encode('utf-8')).hexdigest()[:self.hash_num] + '_'
             else:
-                self.param_name = self.param_name \
-                                  + hashlib.md5(str(param_kwargs[each_key]).encode("utf-8")).hexdigest()[:self.hash_num] + "_"
+                self.param_name \
+                    = self.param_name \
+                    + hashlib.md5(str(param_kwargs[each_key]).encode('utf-8')).hexdigest()[:self.hash_num] + '_'
         self.param_name = self.param_name[:-1]
 
     def run_task(self, input_list):
@@ -186,21 +189,19 @@ class AutoNamingTask(luigi.Task):
         if res is not None:
             self.save_output(res)
         if self.copy_output_to_top != '':
-            shutil.copy(self.output().path, os.path.join('OUTPUT', self.copy_output_to_top))
+            shutil.copy(self.output().path,
+                        self._working_dir / 'OUTPUT' / self.copy_output_to_top)
 
     def output(self):
-        if not os.path.exists('OUTPUT'):
-            os.mkdir('OUTPUT')
-        if not os.path.exists(os.path.join(
-                "OUTPUT",
-                self.working_subdir)):
-            os.mkdir(os.path.join(
-                "OUTPUT",
-                self.working_subdir))
-        return luigi.LocalTarget(os.path.join(
-            "OUTPUT",
-            self.working_subdir,
-            "{}.{}".format(self.param_name, self.output_ext)))
+        if not os.path.exists(self._working_dir / 'OUTPUT'):
+            os.mkdir(self._working_dir / 'OUTPUT')
+        if not os.path.exists(self._working_dir
+                              / 'OUTPUT'
+                              / self.working_subdir):
+            os.mkdir(self._working_dir / 'OUTPUT' / self.working_subdir)
+        return luigi.LocalTarget(
+            self._working_dir / 'OUTPUT' / self.working_subdir /
+            '{}.{}'.format(self.param_name, self.output_ext))
 
     def load_output(self):
         with gzip.open(self.output().path, 'rb') as f:
@@ -213,7 +214,7 @@ class AutoNamingTask(luigi.Task):
         with gzip.open(self.output().path, 'wb') as f:
             pickle.dump(obj, f)
         if self.use_mlflow:
-            mlflow.log_artifact(self.output().path)
+            self.mlflow.log_artifact(self.output().path)
 
     def check_input(self, input_list):
         ''' check the input format
@@ -276,7 +277,7 @@ class OptunaTask(AutoNamingTask):
         study_name = os.path.splitext(os.path.basename(self.output().path))[0]
         study = optuna.create_study(study_name=study_name, storage=f'sqlite:///{self.output().path}',
                                     load_if_exists=True)
-            
+
         n_prev_trials = len(study.trials)
         n_trials = self.n_trials
         timeout = None
@@ -382,7 +383,7 @@ class OptunaTask(AutoNamingTask):
 
                     study._storage.set_trial_value(trial_id, result)
                     study._storage.set_trial_state(trial_id, structs.TrialState.COMPLETE)
-                    study._log_completed_trial(trial_number, result)
+                    study._log_completed_trial(trial, result)
                     #study._progress_bar.update((datetime.datetime.now() - time_start).total_seconds())
             study._storage.remove_session()
         finally:

@@ -10,37 +10,37 @@ __version__ = "1.0"
 __date__ = "Aug 23 2019"
 
 # set luigi_config_path BEFORE importing luigi
-import argparse
 import os
+from pathlib import Path
 import sys
-try:
-    working_dir = sys.argv[1:][sys.argv[1:].index("--working-dir") + 1]
-    os.chdir(working_dir)
-except ValueError:
-    raise argparse.ArgumentError("--working-dir option must be specified.")
-# add a path to luigi.cfg
-os.environ["LUIGI_CONFIG_PATH"] = os.path.abspath(os.path.join("INPUT", "luigi.cfg"))
-sys.path.append(os.path.abspath(os.path.join("INPUT")))
-
-# load parameters from `INPUT/param.py`
-from param import (DataPreprocessing_params,
-                   Train_params,
-                   PerformanceEvaluation_params,
-                   HyperparameterOptimization_params)
-from luigine.abc import MainTask, AutoNamingTask, main, OptunaTask
+from luigine.abc import AutoNamingTask, main, OptunaTask
 
 from datetime import datetime
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
 import glob
-import gzip
 import logging
 import luigi
 import numpy as np
-import pickle
-import sklearn
+
+try:
+    working_dir = Path(sys.argv[1:][sys.argv[1:].index("--working-dir")
+                                    + 1]).resolve()
+except ValueError:
+    raise ValueError("--working-dir option must be specified.")
+
+# load parameters from `INPUT/param.py`
+sys.path.append(str((working_dir / 'INPUT').resolve()))
+from param import (DataPreprocessing_params,
+                   Train_params,
+                   PerformanceEvaluation_params,
+                   HyperparameterOptimization_params)
 
 logger = logging.getLogger('luigi-interface')
+AutoNamingTask._working_dir = working_dir
+AutoNamingTask.working_dir = luigi.Parameter(default=str(working_dir))
+
+# ----------- preamble ------------
 
 
 # Define tasks
@@ -56,10 +56,10 @@ class DataPreprocessing(AutoNamingTask):
         w = np.random.randn(self.DataPreprocessing_params['in_dim'])
         X_train = np.random.randn(self.DataPreprocessing_params['train_size'],
                                   self.DataPreprocessing_params['in_dim'])
-        X_val =  np.random.randn(self.DataPreprocessing_params['val_size'],
+        X_val = np.random.randn(self.DataPreprocessing_params['val_size'],
+                                self.DataPreprocessing_params['in_dim'])
+        X_test = np.random.randn(self.DataPreprocessing_params['test_size'],
                                  self.DataPreprocessing_params['in_dim'])
-        X_test =  np.random.randn(self.DataPreprocessing_params['test_size'],
-                                  self.DataPreprocessing_params['in_dim'])
         y_train = X_train @ w
         y_val = X_val @ w
         y_test = X_test @ w
@@ -83,7 +83,7 @@ class Train(AutoNamingTask):
         return model
 
 
-class PerformanceEvaluation(MainTask, AutoNamingTask):
+class PerformanceEvaluation(AutoNamingTask):
 
     ''' Performance evaluation on the validation set.
     '''
@@ -115,7 +115,7 @@ class PerformanceEvaluation(MainTask, AutoNamingTask):
         return mse
 
 
-class HyperparameterOptimization(OptunaTask, MainTask):
+class HyperparameterOptimization(OptunaTask):
 
     ''' Hyperparameter tuning using the validation set.
     '''
@@ -124,23 +124,23 @@ class HyperparameterOptimization(OptunaTask, MainTask):
 
     def obj_task(self, **kwargs):
         logger.info(kwargs)
-        return PerformanceEvaluation(working_dir=self.working_dir, **kwargs)
+        return PerformanceEvaluation(**kwargs)
 
 
-class TestPerformanceEvaluation(MainTask, AutoNamingTask):
+class TestPerformanceEvaluation(AutoNamingTask):
 
     ''' Pick up the best model (on the validation set), and examine its real performance on the test set.
     '''
 
     output_ext = luigi.Parameter(default='txt')
     OptunaTask_params = luigi.DictParameter(default=HyperparameterOptimization_params)
+    use_mlflow = luigi.BoolParameter(default=True)
     n_trials = luigi.IntParameter()
 
     def requires(self):
         return [DataPreprocessing(DataPreprocessing_params=self.OptunaTask_params['DataPreprocessing_params']),
                 HyperparameterOptimization(OptunaTask_params=self.OptunaTask_params,
-                                           n_trials=self.n_trials,
-                                           working_dir=self.working_dir)]
+                                           n_trials=self.n_trials)]
 
     def run_task(self, input_list):
         _, _, _, _, X_test, y_test = input_list[0]
@@ -151,6 +151,8 @@ class TestPerformanceEvaluation(MainTask, AutoNamingTask):
         model = get_model_task.load_output()
         y_pred = model.predict(X_test)
         mse = mean_squared_error(y_test, y_pred)
+        import mlflow
+        mlflow.log_metric('mse', mse)
         logger.info(f'''
 
 ===================
@@ -171,8 +173,8 @@ test_mse = {mse}
 
 
 if __name__ == "__main__":
-    for each_engine_status in glob.glob("./engine_status.*"):
+    for each_engine_status in glob.glob(str(working_dir / 'engine_status.*')):
         os.remove(each_engine_status)
-    with open("engine_status.ready", "w") as f:
+    with open(working_dir / 'engine_status.ready', 'w') as f:
         f.write("ready: {}\n".format(datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
-    main()
+    main(working_dir)
