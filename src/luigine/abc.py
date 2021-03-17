@@ -259,6 +259,8 @@ class HyperparameterSelectionTask(AutoNamingTask):
 
         for each_idx, each_param_dict in enumerate(self.param_dict_generator()):
             val_score = input_list[each_idx]
+            if isinstance(val_score, tuple):
+                val_score = val_score[0]
             if self.lower_better:
                 if val_score < best_score:
                     best_params = each_param_dict
