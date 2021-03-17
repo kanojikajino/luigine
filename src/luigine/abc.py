@@ -5,25 +5,18 @@ __author__ = 'Hiroshi Kajino, Takeshi Teshima'
 __copyright__ = '(c) Copyright IBM Corp. 2019'
 
 import datetime
-import gc
 import gzip
 import hashlib
+from itertools import product
 import logging
-import math
 import os
 import pickle
-import pprint
 import shutil
 import time
 from copy import deepcopy
 from collections import OrderedDict
 import luigi
 from luigi.setup_logging import InterfaceLogging
-import numpy as np
-from optuna import exceptions
-from optuna import structs
-from optuna import trial as trial_module
-import optuna
 from .utils import sort_dict, dict_to_str, checksum
 
 logger = logging.getLogger('luigi-interface')
@@ -54,9 +47,6 @@ def main(working_dir):
         return True
     InterfaceLogging._cli = _cli
     luigi.Task.disable_window_seconds = None
-
-    optuna.logging.enable_propagation()
-    optuna.logging.disable_default_handler()
 
     # mkdir if not exists
     if not (working_dir / 'ENGLOG').exists():
@@ -240,244 +230,69 @@ class AutoNamingTask(luigi.Task):
         return self.__class__.__name__
 
 
-class OptunaTask(AutoNamingTask):
+class HyperparameterSelectionTask(AutoNamingTask):
 
-    ''' Parameter optimization task using Optuna.
-    Given a task that receives parameters and outputs a loss to be minimized,
-    this task can find better parameters that will achieve lower loss.
-
-    Attributes
-    ----------
-    OptunaTask_params : DictParameters
-        Dictionary of Dictionaries, where each dictionary corresponds to each task's `DictParameter`
-        A key starting from `@` will get suggestion from optuna.
-        For example, if the user would like to choose better regularization parameter `C` from [0, 1], instead of specifying {'C': 1.0}, specify it as {'@C': ['uniform', [0, 1]]}.
-        The first element of the value is used to choose `suggest_{}` method, and the second element (list) is used as args for the suggestion method.
-    n_trials : int
-        the number of trials in optuna.
+    ''' Hyperparameter selection task.
     '''
 
-    output_ext = luigi.Parameter(default='db')
-    OptunaTask_params = luigi.DictParameter()
-    n_trials = luigi.IntParameter(default=100)
+    HyperparameterSelectionTask_params = luigi.DictParameter()
+    lower_better = luigi.BoolParameter(default=True)
+
+    def requires(self):
+        task_list = [self.obj_task(**each_param_dict)
+                     for each_param_dict in self.param_dict_generator()]
+        return task_list
 
     def obj_task(self):
-        ''' return a `luigi.Task` instance, which, given a set of parameters in dict, returns a `loss` to be minimized.
+        ''' return a `luigi.Task` instance,
+        which, given a set of parameters in dict, returns a `loss` to be minimized.
         '''
         raise NotImplementedError
 
     def run_task(self, input_list):
-        pass
+        best_params = None
+        best_score = None
+        if self.lower_better:
+            best_score = float('inf')
+        else:
+            best_score = -float('inf')
 
-    def run(self):
-        ''' non-negligible part of this function was copied from optuna code distributed under MIT license.
-        License file: https://github.com/pfnet/optuna/blob/master/LICENSE
-        Copyright (c) 2018 Preferred Networks, Inc.
-        '''
-        study_name = os.path.splitext(os.path.basename(self.output().path))[0]
-        study = optuna.create_study(study_name=study_name, storage=f'sqlite:///{self.output().path}',
-                                    load_if_exists=True)
+        for each_idx, each_param_dict in enumerate(self.param_dict_generator()):
+            val_score = input_list[each_idx]
+            if self.lower_better:
+                if val_score < best_score:
+                    best_params = each_param_dict
+                    best_score = val_score
+            else:
+                if val_score > best_score:
+                    best_params = each_param_dict
+                    best_score = val_score
+        logger.info(' * best score is {}'.format(best_score))
+        return best_score, best_params
 
-        n_prev_trials = len(study.trials)
-        n_trials = self.n_trials
-        timeout = None
-        gc_after_trial = True
-        if not study._optimize_lock.acquire(False):
-            raise RuntimeError("Nested invocation of `Study.optimize` method isn't allowed.")
+    def param_dict_generator(self):
 
-        try:
-            i_trial = 0
-            time_start = datetime.datetime.now()
-            while True:
-                if n_trials is not None:
-                    if i_trial >= n_trials:
-                        break
-                    i_trial += 1
+        def _create_subparams(param_dict):
+            product_key_list = []
+            product_val_list = []
+            for each_key, each_val in param_dict.items():
+                if isinstance(each_val, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
+                    product_key_list.append(each_key)
+                    product_val_list.append(_create_subparams(each_val))
+                if each_key.startswith('@'):
+                    product_key_list.append(each_key[1:])
+                    product_val_list.append(each_val)
 
-                if timeout is not None:
-                    elapsed_seconds = (datetime.datetime.now() - time_start).total_seconds()
-                    if elapsed_seconds >= timeout:
-                        break
-
-                if n_prev_trials == 0:
-                    task_done = False
-                else:
-                    if i_trial > n_prev_trials:
-                        pass
+            for each_config in product(*product_val_list):
+                out_param_dict = dict()
+                for each_key, each_val in param_dict.items():
+                    if isinstance(each_val, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
+                        out_param_dict[each_key] \
+                            = each_config[product_key_list.index(each_key)]
+                    elif each_key.startswith('@'):
+                        out_param_dict[each_key[1:]] \
+                            = each_config[product_key_list.index(each_key[1:])]
                     else:
-                        if study.trials_dataframe().loc[i_trial-1, 'value'] is None:
-                            task_done = False
-                        elif np.isnan(study.trials_dataframe().loc[i_trial-1, 'value']):
-                            task_done = False
-                        else:
-                            task_done = True
-                if i_trial > n_prev_trials:
-                    trial_id = study._pop_waiting_trial_id()
-                    if trial_id is None:
-                        trial_id = study._storage.create_new_trial(study._study_id)
-                    trial = trial_module.Trial(study, trial_id)
-                    trial_number = trial.number
-                    param_dict = self.create_params(trial)
-                    res = self.obj_task(**param_dict)
-                    res_output = yield res
-                elif i_trial >= n_prev_trials and (not task_done):
-                    trial_id = i_trial
-                    trial = trial_module.Trial(study, trial_id)
-                    trial_number = trial.number
-
-                    param_dict = self.create_params(trial)
-                    res = self.obj_task(**param_dict)
-                    res_output = yield res
-                    try:
-                        result = float(res_output.open('r').read())
-                    except exceptions.TrialPruned as e:
-                        message = 'Setting status of trial#{} as {}. {}'.format(trial_number,
-                                                                                structs.TrialState.PRUNED,
-                                                                                str(e))
-                        logger.info(message)
-
-                        # Register the last intermediate value if present as the value of the trial.
-                        # TODO(hvy): Whether a pruned trials should have an actual value can be discussed.
-                        frozen_trial = study._storage.get_trial(trial_id)
-                        last_step = frozen_trial.last_step
-                        if last_step is not None:
-                            study._storage.set_trial_value(
-                                trial_id, frozen_trial.intermediate_values[last_step])
-                        study._storage.set_trial_state(trial_id, structs.TrialState.PRUNED)
-                    except Exception as e:
-                        message = 'Setting status of trial#{} as {} because of the following error: {}'\
-                            .format(trial_number, structs.TrialState.FAIL, repr(e))
-                        logger.warning(message, exc_info=True)
-                        study._storage.set_trial_system_attr(trial_id, 'fail_reason', message)
-                        study._storage.set_trial_state(trial_id, structs.TrialState.FAIL)
-                        raise
-                    finally:
-                        # The following line mitigates memory problems that can be occurred in some
-                        # environments (e.g., services that use computing containers such as CircleCI).
-                        # Please refer to the following PR for further details:
-                        # https://github.com/optuna/optuna/pull/325.
-                        if gc_after_trial:
-                            gc.collect()
-
-                    try:
-                        result = float(result)
-                    except (
-                            ValueError,
-                            TypeError,
-                    ):
-                        message = 'Setting status of trial#{} as {} because the returned value from the ' \
-                                  'objective function cannot be casted to float. Returned value is: ' \
-                                  '{}'.format(trial_number, structs.TrialState.FAIL, repr(result))
-                        logger.warning(message)
-                        study._storage.set_trial_system_attr(trial_id, 'fail_reason', message)
-                        study._storage.set_trial_state(trial_id, structs.TrialState.FAIL)
-                        return trial
-
-                    if math.isnan(result):
-                        message = 'Setting status of trial#{} as {} because the objective function ' \
-                                  'returned {}.'.format(trial_number, structs.TrialState.FAIL, result)
-                        logger.warning(message)
-                        study._storage.set_trial_system_attr(trial_id, 'fail_reason', message)
-                        study._storage.set_trial_state(trial_id, structs.TrialState.FAIL)
-                        return trial
-
-                    study._storage.set_trial_value(trial_id, result)
-                    study._storage.set_trial_state(trial_id, structs.TrialState.COMPLETE)
-                    study._log_completed_trial(trial, result)
-                    #study._progress_bar.update((datetime.datetime.now() - time_start).total_seconds())
-            study._storage.remove_session()
-        finally:
-            study._optimize_lock.release()
-            #study._progress_bar.close()
-            #del study._progress_bar
-        best_params_str = pprint.pformat(study.best_params)
-        logger.info(f'''
-=====================================
-best_params:\n{best_params_str}
-best_value:\t{study.best_value}
-=====================================
-        ''')
-        return None
-
-    def create_params(self, trial):
-        ''' create a dictionary of parameters for `obj_task` given a trial
-
-        Parameters
-        ----------
-        trial : optuna.trial.Trial
-            trial object
-
-        Returns
-        -------
-        dict
-            parameters for `obj_task`
-        '''
-
-        def _create_subparams(trial, param_dict):
-            out_param_dict = dict()
-            for each_key, each_val in param_dict.items():
-                if isinstance(each_val, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
-                    out_param_dict[each_key] = _create_subparams(trial, each_val)
-                elif each_key.startswith('@'):
-                    out_param_dict[each_key[1:]] = getattr(
-                        trial,
-                        'suggest_{}'.format(each_val[0]))(each_key[1:], *each_val[1])
-                else:
-                    out_param_dict[each_key] = each_val
-            return out_param_dict
-
-        return _create_subparams(trial, self.OptunaTask_params)
-
-    def objective(self, trial):
-        ''' objective function
-
-        Parameters
-        ----------
-        trial : optuna.trial.Trial
-            trial object
-
-        Returns
-        -------
-        float
-            loss to be minimized. if a task fails, it returns `np.inf`
-        '''
-        param_dict = self.create_params(trial)
-        res = self.obj_task(**param_dict)
-        luigi.build([res], workers=1)
-        try:
-            val = float(res.output().open('r').read())
-        except:
-            val = np.inf
-            
-        return val
-
-    def load_study(self):
-        study_name = os.path.splitext(os.path.basename(self.output().path))[0]
-        study = optuna.load_study(study_name=study_name,
-                                  storage=f'sqlite:///{self.output().path}')
-        return study
-
-    def load_output(self):
-        study = self.load_study()
-        return study, self.best_params
-
-    @property
-    def best_params(self):
-        study = self.load_study()
-
-        def _create_subparams(study, param_dict):
-            out_param_dict = dict()
-            for each_key, each_val in param_dict.items():
-                if isinstance(each_val, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
-                    out_param_dict[each_key] = _create_subparams(study, each_val)
-                elif each_key.startswith('@'):
-                    out_param_dict[each_key[1:]] = study.best_params[each_key[1:]]
-                else:
-                    out_param_dict[each_key] = each_val
-            return out_param_dict
-        return _create_subparams(study, self.OptunaTask_params)
-
-    @property
-    def best_value(self):
-        study = self.load_study()
-        return study.best_value
+                        out_param_dict[each_key] = each_val
+                yield out_param_dict
+        return _create_subparams(self.HyperparameterSelectionTask_params)

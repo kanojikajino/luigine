@@ -28,7 +28,7 @@ HyperparameterOptimization_params = {
         'val_size': 100,
         'test_size': 500},
     'Train_params': {
-        'model_kwargs': {'@alpha': ['uniform', [0, 1]],
-                         '@fit_intercept': ["categorical", [[True, False]]]}
+        'model_kwargs': {'@alpha': [1e-4, 1e-3, 1e-2, 1e-1],
+                         '@fit_intercept': [True, False]}
     }
 }

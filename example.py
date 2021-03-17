@@ -13,7 +13,9 @@ __date__ = "Aug 23 2019"
 import os
 from pathlib import Path
 import sys
-from luigine.abc import AutoNamingTask, main, OptunaTask
+from luigine.abc import (AutoNamingTask,
+                         main,
+                         HyperparameterSelectionTask)
 
 from datetime import datetime
 from sklearn.linear_model import Ridge
@@ -88,7 +90,6 @@ class PerformanceEvaluation(AutoNamingTask):
     ''' Performance evaluation on the validation set.
     '''
 
-    output_ext = luigi.Parameter(default='txt')
     DataPreprocessing_params = luigi.DictParameter(default=DataPreprocessing_params)
     Train_params = luigi.DictParameter(default=Train_params)
     PerformanceEvaluation_params = luigi.DictParameter(default=PerformanceEvaluation_params)
@@ -105,25 +106,15 @@ class PerformanceEvaluation(AutoNamingTask):
         mse = mean_squared_error(y_val, y_pred)
         return mse
 
-    def save_output(self, mse):
-        with open(self.output().path, 'w') as f:
-            f.write(f'{mse}')
 
-    def load_output(self):
-        with open(self.output().path, 'w') as f:
-            mse = f.read()
-        return mse
-
-
-class HyperparameterOptimization(OptunaTask):
+class HyperparameterOptimization(HyperparameterSelectionTask):
 
     ''' Hyperparameter tuning using the validation set.
     '''
 
-    OptunaTask_params = luigi.DictParameter(default=HyperparameterOptimization_params)
+    HyperparameterSelectionTask_params = luigi.DictParameter(default=HyperparameterOptimization_params)
 
     def obj_task(self, **kwargs):
-        logger.info(kwargs)
         return PerformanceEvaluation(**kwargs)
 
 
@@ -133,14 +124,15 @@ class TestPerformanceEvaluation(AutoNamingTask):
     '''
 
     output_ext = luigi.Parameter(default='txt')
-    OptunaTask_params = luigi.DictParameter(default=HyperparameterOptimization_params)
+    HyperparameterSelectionTask_params = luigi.DictParameter(
+        default=HyperparameterOptimization_params)
     use_mlflow = luigi.BoolParameter(default=True)
-    n_trials = luigi.IntParameter()
 
     def requires(self):
-        return [DataPreprocessing(DataPreprocessing_params=self.OptunaTask_params['DataPreprocessing_params']),
-                HyperparameterOptimization(OptunaTask_params=self.OptunaTask_params,
-                                           n_trials=self.n_trials)]
+        return [DataPreprocessing(
+            DataPreprocessing_params=self.HyperparameterSelectionTask_params['DataPreprocessing_params']),
+                HyperparameterOptimization(
+                    HyperparameterSelectionTask_params=self.HyperparameterSelectionTask_params)]
 
     def run_task(self, input_list):
         _, _, _, _, X_test, y_test = input_list[0]
