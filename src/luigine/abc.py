@@ -158,10 +158,12 @@ class AutoNamingTask(luigi.Task):
         raise NotImplementedError
 
     def run(self):
-        if not isinstance(self.requires(), list):
-            raise ValueError('self.requires must return a list of tasks.')
+        if isinstance(self.requires(), luigi.Task):
+            requires_list = [self.requires()]
+        else:
+            requires_list = self.requires()
 
-        input_list = [each_task.load_output() for each_task in self.requires()]
+        input_list = [each_task.load_output() for each_task in requires_list]
         valid_input = self.check_input(input_list)
         if not valid_input:
             raise ValueError('input format is not valid.')

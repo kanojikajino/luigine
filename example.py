@@ -16,12 +16,12 @@ import sys
 from luigine.abc import (AutoNamingTask,
                          main,
                          HyperparameterSelectionTask)
-
 from datetime import datetime
 from sklearn.linear_model import Ridge
 from sklearn.metrics import mean_squared_error
 import glob
 import logging
+from luigi.util import requires
 import luigi
 import numpy as np
 
@@ -33,10 +33,7 @@ except ValueError:
 
 # load parameters from `INPUT/param.py`
 sys.path.append(str((working_dir / 'INPUT').resolve()))
-from param import (DataPreprocessing_params,
-                   Train_params,
-                   PerformanceEvaluation_params,
-                   HyperparameterOptimization_params)
+from param import HyperparameterOptimization_params
 
 logger = logging.getLogger('luigi-interface')
 AutoNamingTask._working_dir = working_dir
@@ -70,13 +67,10 @@ class DataPreprocessing(AutoNamingTask):
                 X_test, y_test)
 
 
+@requires(DataPreprocessing)
 class Train(AutoNamingTask):
 
-    DataPreprocessing_params = luigi.DictParameter()
     Train_params = luigi.DictParameter()
-
-    def requires(self):
-        return [DataPreprocessing(DataPreprocessing_params=self.DataPreprocessing_params)]
 
     def run_task(self, input_list):
         X_train, y_train, _, _, _, _ = input_list[0]
@@ -85,19 +79,13 @@ class Train(AutoNamingTask):
         return model
 
 
+@requires(DataPreprocessing, Train)
 class PerformanceEvaluation(AutoNamingTask):
 
     ''' Performance evaluation on the validation set.
     '''
 
-    DataPreprocessing_params = luigi.DictParameter(default=DataPreprocessing_params)
-    Train_params = luigi.DictParameter(default=Train_params)
-    PerformanceEvaluation_params = luigi.DictParameter(default=PerformanceEvaluation_params)
-
-    def requires(self):
-        return [DataPreprocessing(DataPreprocessing_params=self.DataPreprocessing_params),
-                Train(DataPreprocessing_params=self.DataPreprocessing_params,
-                      Train_params=self.Train_params)]
+    PerformanceEvaluation_params = luigi.DictParameter()
 
     def run_task(self, input_list):
         _, _, X_val, y_val, _, _ = input_list[0]
@@ -112,7 +100,7 @@ class HyperparameterOptimization(HyperparameterSelectionTask):
     ''' Hyperparameter tuning using the validation set.
     '''
 
-    HyperparameterSelectionTask_params = luigi.DictParameter(default=HyperparameterOptimization_params)
+    HyperparameterSelectionTask_params = luigi.DictParameter()
 
     def obj_task(self, **kwargs):
         return PerformanceEvaluation(**kwargs)
@@ -130,15 +118,18 @@ class TestPerformanceEvaluation(AutoNamingTask):
 
     def requires(self):
         return [DataPreprocessing(
-            DataPreprocessing_params=self.HyperparameterSelectionTask_params['DataPreprocessing_params']),
+            DataPreprocessing_params=self.HyperparameterSelectionTask_params
+            ['DataPreprocessing_params']),
                 HyperparameterOptimization(
-                    HyperparameterSelectionTask_params=self.HyperparameterSelectionTask_params)]
+                    HyperparameterSelectionTask_params\
+                    =self.HyperparameterSelectionTask_params)]
 
     def run_task(self, input_list):
         _, _, _, _, X_test, y_test = input_list[0]
         _, best_params = input_list[1]
-        get_model_task = Train(DataPreprocessing_params=best_params['DataPreprocessing_params'],
-                               Train_params=best_params['Train_params'])
+        get_model_task = Train(
+            DataPreprocessing_params=best_params['DataPreprocessing_params'],
+            Train_params=best_params['Train_params'])
         luigi.build([get_model_task])
         model = get_model_task.load_output()
         y_pred = model.predict(X_test)
@@ -159,7 +150,7 @@ test_mse = {mse}
             f.write(f'{mse}')
 
     def load_output(self):
-        with open(self.output().path, 'w') as f:
+        with open(self.output().path, 'r') as f:
             mse = f.read()
         return mse
 
