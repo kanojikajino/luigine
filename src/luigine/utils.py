@@ -7,6 +7,8 @@ __copyright__ = "(c) Copyright IBM Corp. 2019"
 from copy import deepcopy
 from collections import OrderedDict
 import hashlib
+import luigi.util
+from luigi.util import inherits
 import luigi
 
 
