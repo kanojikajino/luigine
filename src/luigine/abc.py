@@ -10,6 +10,7 @@ import hashlib
 from itertools import product
 import logging
 import os
+import pandas as pd
 import pickle
 import shutil
 import time
@@ -232,13 +233,13 @@ class AutoNamingTask(luigi.Task):
         return self.__class__.__name__
 
 
-class HyperparameterSelectionTask(AutoNamingTask):
+class MultipleRunBase(AutoNamingTask):
 
     ''' Hyperparameter selection task.
     '''
 
-    HyperparameterSelectionTask_params = luigi.DictParameter()
-    lower_better = luigi.BoolParameter(default=True)
+    MultipleRun_params = luigi.DictParameter()
+    score_name = luigi.Parameter(default='score')
 
     def requires(self):
         task_list = [self.obj_task(**each_param_dict)
@@ -247,9 +248,95 @@ class HyperparameterSelectionTask(AutoNamingTask):
 
     def obj_task(self):
         ''' return a `luigi.Task` instance,
-        which, given a set of parameters in dict, returns a `loss` to be minimized.
+        which, given a set of parameters in dict,
+        returns a `loss` to be minimized.
         '''
         raise NotImplementedError
+
+    def run_task(self, input_list):
+        res_list = []
+        for each_idx, each_param_dict in enumerate(
+                self.param_dict_generator()):
+            param_df = self.extract_variable(each_param_dict)
+            param_df = param_df.rename({0: each_idx})
+            score_df = pd.DataFrame([[input_list[each_idx]]],
+                                    columns=[self.score_name],
+                                    index=[each_idx])
+            res_df = pd.concat([param_df, score_df], axis=1)
+            res_list.append(res_df)
+        return pd.concat(res_list)
+
+    def param_dict_generator(self):
+
+        def _create_subparams(param_dict):
+            product_key_list = []
+            product_val_list = []
+            for each_key, each_val in param_dict.items():
+                if isinstance(each_val, (dict,
+                                         OrderedDict,
+                                         luigi.freezing.FrozenOrderedDict)):
+                    product_key_list.append(each_key)
+                    product_val_list.append(_create_subparams(each_val))
+                elif each_key.startswith('@'):
+                    product_key_list.append(each_key[1:])
+                    product_val_list.append(each_val)
+
+            for each_config in product(*product_val_list):
+                out_param_dict = dict()
+                for each_key, each_val in param_dict.items():
+                    if isinstance(each_val,
+                                  (dict,
+                                   OrderedDict,
+                                   luigi.freezing.FrozenOrderedDict)):
+                        out_param_dict[each_key] \
+                            = each_config[product_key_list.index(each_key)]
+                    elif each_key.startswith('@'):
+                        out_param_dict[each_key[1:]] \
+                            = each_config[product_key_list.index(each_key[1:])]
+                    else:
+                        out_param_dict[each_key] = each_val
+                yield out_param_dict
+        return _create_subparams(self.MultipleRun_params)
+
+    def extract_variable(self, param_dict):
+
+        def _identify_variable(param_dict):
+            variable_list = []
+            for each_key, each_val in param_dict.items():
+                if isinstance(each_val, (dict,
+                                         OrderedDict,
+                                         luigi.freezing.FrozenOrderedDict)):
+                    variable_list += [(each_key,) + each_tuple
+                                      for each_tuple
+                                      in _identify_variable(each_val)]
+                elif each_key.startswith('@'):
+                    variable_list.append((each_key[1:],))
+            return variable_list
+
+        def _extract_variable(each_param_dict, key_tuple):
+            if len(key_tuple) == 1:
+                return each_param_dict[key_tuple[0]]
+            else:
+                return _extract_variable(
+                    each_param_dict[key_tuple[0]],
+                    key_tuple[1:])
+
+        column_list = []
+        val_list = []
+        for each_variable in _identify_variable(self.MultipleRun_params):
+            column_list.append(each_variable)
+            val_list.append(
+                _extract_variable(param_dict,
+                                  each_variable))
+        return pd.DataFrame([val_list], columns=column_list, index=[0])
+
+
+class HyperparameterSelectionTask(MultipleRunBase):
+
+    ''' Hyperparameter selection task.
+    '''
+
+    lower_better = luigi.BoolParameter(default=True)
 
     def run_task(self, input_list):
         best_params = None
@@ -273,30 +360,3 @@ class HyperparameterSelectionTask(AutoNamingTask):
                     best_score = val_score
         logger.info(' * best score is {}'.format(best_score))
         return best_score, best_params
-
-    def param_dict_generator(self):
-
-        def _create_subparams(param_dict):
-            product_key_list = []
-            product_val_list = []
-            for each_key, each_val in param_dict.items():
-                if isinstance(each_val, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
-                    product_key_list.append(each_key)
-                    product_val_list.append(_create_subparams(each_val))
-                if each_key.startswith('@'):
-                    product_key_list.append(each_key[1:])
-                    product_val_list.append(each_val)
-
-            for each_config in product(*product_val_list):
-                out_param_dict = dict()
-                for each_key, each_val in param_dict.items():
-                    if isinstance(each_val, (dict, OrderedDict, luigi.freezing.FrozenOrderedDict)):
-                        out_param_dict[each_key] \
-                            = each_config[product_key_list.index(each_key)]
-                    elif each_key.startswith('@'):
-                        out_param_dict[each_key[1:]] \
-                            = each_config[product_key_list.index(each_key[1:])]
-                    else:
-                        out_param_dict[each_key] = each_val
-                yield out_param_dict
-        return _create_subparams(self.HyperparameterSelectionTask_params)

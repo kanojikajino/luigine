@@ -15,6 +15,7 @@ from pathlib import Path
 import sys
 from luigine.abc import (AutoNamingTask,
                          main,
+                         MultipleRunBase,
                          HyperparameterSelectionTask)
 from datetime import datetime
 from sklearn.linear_model import Ridge
@@ -33,7 +34,7 @@ except ValueError:
 
 # load parameters from `INPUT/param.py`
 sys.path.append(str((working_dir / 'INPUT').resolve()))
-from param import HyperparameterOptimization_params
+from param import MultipleRun_params
 
 logger = logging.getLogger('luigi-interface')
 AutoNamingTask._working_dir = working_dir
@@ -100,33 +101,29 @@ class HyperparameterOptimization(HyperparameterSelectionTask):
     ''' Hyperparameter tuning using the validation set.
     '''
 
-    HyperparameterSelectionTask_params = luigi.DictParameter()
+    MultipleRun_params = luigi.DictParameter()
 
     def obj_task(self, **kwargs):
         return PerformanceEvaluation(**kwargs)
 
 
+@requires(HyperparameterOptimization)
 class TestPerformanceEvaluation(AutoNamingTask):
 
     ''' Pick up the best model (on the validation set), and examine its real performance on the test set.
     '''
 
     output_ext = luigi.Parameter(default='txt')
-    HyperparameterSelectionTask_params = luigi.DictParameter(
-        default=HyperparameterOptimization_params)
+    MultipleRun_params = luigi.DictParameter(
+        default=MultipleRun_params)
     use_mlflow = luigi.BoolParameter(default=True)
 
-    def requires(self):
-        return [DataPreprocessing(
-            DataPreprocessing_params=self.HyperparameterSelectionTask_params
-            ['DataPreprocessing_params']),
-                HyperparameterOptimization(
-                    HyperparameterSelectionTask_params\
-                    =self.HyperparameterSelectionTask_params)]
-
     def run_task(self, input_list):
-        _, _, _, _, X_test, y_test = input_list[0]
-        _, best_params = input_list[1]
+        _, best_params = input_list[0]
+
+        data_task = DataPreprocessing(
+            DataPreprocessing_params=best_params['DataPreprocessing_params'])
+        _, _, _, _, X_test, y_test = data_task.load_output()
         get_model_task = Train(
             DataPreprocessing_params=best_params['DataPreprocessing_params'],
             Train_params=best_params['Train_params'])
@@ -154,6 +151,26 @@ test_mse = {mse}
             mse = f.read()
         return mse
 
+
+class MultipleRun(MultipleRunBase):
+
+    ''' Hyperparameter tuning using the validation set.
+    '''
+
+    MultipleRun_params = luigi.DictParameter()
+
+    def obj_task(self, **kwargs):
+        return PerformanceEvaluation(**kwargs)
+
+
+@requires(MultipleRun)
+class GatherScores(AutoNamingTask):
+
+    MultipleRun_params = luigi.DictParameter(
+        default=MultipleRun_params)
+
+    def run_task(self, input_list):
+        logger.info(input_list[0])
 
 if __name__ == "__main__":
     for each_engine_status in glob.glob(str(working_dir / 'engine_status.*')):

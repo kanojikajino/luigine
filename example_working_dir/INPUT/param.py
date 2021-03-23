@@ -8,8 +8,8 @@ __version__ = "1.0"
 __date__ = "Aug 23 2019"
 
 
-HyperparameterOptimization_params = {
-    'DataPreprocessing_params' : {
+MultipleRun_params = {
+    'DataPreprocessing_params': {
         'in_dim': 50,
         'train_size': 100,
         'val_size': 100,
