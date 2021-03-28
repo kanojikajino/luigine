@@ -10,7 +10,6 @@ import hashlib
 from itertools import product
 import logging
 import os
-import pandas as pd
 import pickle
 import shutil
 import time
@@ -18,6 +17,7 @@ from copy import deepcopy
 from collections import OrderedDict
 import luigi
 from luigi.setup_logging import InterfaceLogging
+import pandas as pd
 from .utils import sort_dict, dict_to_str, checksum
 
 logger = logging.getLogger('luigi-interface')
@@ -360,3 +360,51 @@ class HyperparameterSelectionTask(MultipleRunBase):
                     best_score = val_score
         logger.info(' * best score is {}'.format(best_score))
         return best_score, best_params
+
+
+class LinePlotMultipleRun(AutoNamingTask):
+
+    ''' Line plot of the result of `MultipleRun`.
+    Shared x-axis, multiple lines are supported.
+    The parameter will be like:
+
+PlotTestLoss_params = {
+    'x': ('DataGeneration_params', 'train_sample_size'),
+    'plot_config_list': [{'extract_list': [(('Train_params', 'model_name'), 'SigmoidPOSNN')]},
+                         {'extract_list': [(('Train_params', 'model_name'), 'SigmoidDiffSNN')]}],
+    'fig_config': {'xlabel': {'xlabel': r'\# of training examples'},
+                   'ylabel': {'ylabel': 'ELBO'},
+                   'legend': {'labels': ['SNN', r'$\partial$SNN']}}
+}
+    '''
+
+    output_ext = luigi.Parameter(default='pdf')
+    MultipleRun_params = luigi.DictParameter()
+    LinePlotMultipleRun_params = luigi.DictParameter()
+
+    def run_task(self, input_list):
+        import matplotlib
+        matplotlib.use('Agg')
+        import matplotlib.pyplot as plt
+
+        res_df = input_list[0]
+        fig, ax = plt.subplots()
+        for each_plot_config in self.LinePlotMultipleRun_params['plot_config_list']:
+            # each_plot_config is a dict containing key 'extract_list'
+            _res_df = deepcopy(res_df)
+            if each_plot_config['extract_list']:
+                for each_extract_rule in each_plot_config['extract_list']:
+                    # each_extract_rule is a tuple of a column name of res_df and its value.
+                    # each rule extracts entries that has
+                    # the specified value in the specified column.
+                    _res_df = _res_df[_res_df[each_extract_rule[0]] == each_extract_rule[1]]
+            _res_df.plot(x=self.LinePlotMultipleRun_params['x'],
+                         y=self.requires().score_name,
+                         ax=ax)
+        ax.set_xlabel(**self.LinePlotMultipleRun_params['fig_config']['xlabel'])
+        ax.set_ylabel(**self.LinePlotMultipleRun_params['fig_config']['ylabel'])
+        ax.legend(**self.LinePlotMultipleRun_params['fig_config']['legend'])
+        return ax.get_figure()
+
+    def save_output(self, res):
+        res.savefig(self.output().path)
