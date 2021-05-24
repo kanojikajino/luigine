@@ -384,6 +384,9 @@ PlotTestLoss_params = {
 
     def run_task(self, input_list):
         import matplotlib
+        matplotlib.rcParams['ps.useafm'] = True
+        matplotlib.rcParams['pdf.use14corefonts'] = True
+        matplotlib.rcParams['text.usetex'] = True
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
 
