@@ -400,7 +400,8 @@ PlotTestLoss_params = {
                     _res_df = _res_df[_res_df[each_extract_rule[0]] == each_extract_rule[1]]
             _res_df.plot(x=self.LinePlotMultipleRun_params['x'],
                          y=self.requires().score_name,
-                         ax=ax)
+                         ax=ax,
+                         **each_plot_config.get('plot_kwargs', {}))
         ax.set_xlabel(**self.LinePlotMultipleRun_params['fig_config']['xlabel'])
         ax.set_ylabel(**self.LinePlotMultipleRun_params['fig_config']['ylabel'])
         ax.legend(**self.LinePlotMultipleRun_params['fig_config']['legend'])
