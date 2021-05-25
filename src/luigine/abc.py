@@ -411,4 +411,4 @@ PlotTestLoss_params = {
         return ax.get_figure()
 
     def save_output(self, res):
-        res.savefig(self.output().path)
+        res.savefig(self.output().path, bbox_inches='tight', pad_inches=0.0)
