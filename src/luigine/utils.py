@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 __author__ = "Hiroshi Kajino"
-__copyright__ = "(c) Copyright IBM Corp. 2019"
+__copyright__ = "Copyright IBM Corp. 2019, 2021"
 
 from copy import deepcopy
 from collections import OrderedDict

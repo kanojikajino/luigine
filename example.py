@@ -5,9 +5,7 @@ A template main script.
 """
 
 __author__ = "Hiroshi Kajino"
-__copyright__ = "(c) Copyright IBM Corp. 2019"
-__version__ = "1.0"
-__date__ = "Aug 23 2019"
+__copyright__ = "Copyright IBM Corp. 2019, 2021"
 
 # set luigi_config_path BEFORE importing luigi
 import os

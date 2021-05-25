@@ -3,6 +3,6 @@
 """ Title """
 
 __author__ = "Hiroshi Kajino <KAJINO@jp.ibm.com>"
-__copyright__ = "(c) Copyright IBM Corp. 2020"
+__copyright__ = "Copyright IBM Corp. 2019, 2021"
 
 from . import abc, utils

@@ -3,7 +3,7 @@
 ''' setup file for luigine. '''
 
 __author__ = 'Hiroshi Kajino'
-__copyright__ = '(C) Copyright IBM Corp. 2019'
+__copyright__ = 'Copyright IBM Corp. 2019, 2021'
 
 from setuptools import setup, find_packages
 
@@ -12,7 +12,7 @@ def _requires_from_file(filename):
 
 setup(
     name='luigine',
-    version='1.2',
+    version='1.3',
     author='Hiroshi Kajino',
     url='https://github.com/kanojikajino/luigine',
     author_email='hiroshi.kajino.1989@gmail.com',
