@@ -238,6 +238,7 @@ class MultipleRunBase(AutoNamingTask):
     ''' Hyperparameter selection task.
     '''
 
+    output_ext = luigi.Parameter(default='pklz')
     MultipleRun_params = luigi.DictParameter()
     score_name = luigi.Parameter(default='score')
 
