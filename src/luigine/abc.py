@@ -197,15 +197,27 @@ class AutoNamingTask(luigi.Task):
             '{}.{}'.format(self.param_name, self.output_ext))
 
     def load_output(self):
-        with gzip.open(self.output().path, 'rb') as f:
-            res = pickle.load(f)
+        if self.output_ext == 'pklz':
+            with gzip.open(self.output().path, 'rb') as f:
+                res = pickle.load(f)
+        elif self.output_ext == 'pkl':
+            with open(self.output().path, 'rb') as f:
+                res = pickle.load(f)
+        else:
+            raise ValueError('ext {} is not supported'.format(self.output_ext))
         if self.remove_output_file:
             self.remove_output()
         return res
 
     def save_output(self, obj):
-        with gzip.open(self.output().path, 'wb') as f:
-            pickle.dump(obj, f)
+        if self.output_ext == 'pklz':
+            with gzip.open(self.output().path, 'wb') as f:
+                pickle.dump(obj, f)
+        elif self.output_ext == 'pkl':
+            with open(self.output().path, 'wb') as f:
+                pickle.dump(obj, f)
+        else:
+            raise ValueError('ext {} is not supported'.format(self.output_ext))
         if self.use_mlflow:
             self.mlflow.log_artifact(self.output().path)
 
