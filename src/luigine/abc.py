@@ -272,9 +272,13 @@ class MultipleRunBase(AutoNamingTask):
                 self.param_dict_generator()):
             param_df = self.extract_variable(each_param_dict)
             param_df = param_df.rename({0: each_idx})
-            score_df = pd.DataFrame([[input_list[each_idx]]],
-                                    columns=[self.score_name],
-                                    index=[each_idx])
+            if isinstance(input_list[each_idx], dict):
+                score_df = pd.DataFrame(input_list[each_idx],
+                                        index=[each_idx])
+            else:
+                score_df = pd.DataFrame([[input_list[each_idx]]],
+                                        columns=[self.score_name],
+                                        index=[each_idx])
             res_df = pd.concat([param_df, score_df], axis=1)
             res_list.append(res_df)
         return pd.concat(res_list)
@@ -397,27 +401,36 @@ PlotTestLoss_params = {
 
     def run_task(self, input_list):
         import matplotlib
-        matplotlib.rcParams['ps.useafm'] = True
-        matplotlib.rcParams['pdf.use14corefonts'] = True
-        matplotlib.rcParams['text.usetex'] = True
+        matplotlib.rcParams['pdf.fonttype'] = 42
+        matplotlib.rcParams['ps.fonttype'] = 42
+        #matplotlib.rcParams['ps.useafm'] = True
+        #matplotlib.rcParams['pdf.use14corefonts'] = True
+        #matplotlib.rcParams['text.usetex'] = True
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
-
         res_df = input_list[0]
+
         fig, ax = plt.subplots()
         for each_plot_config in self.LinePlotMultipleRun_params['plot_config_list']:
             # each_plot_config is a dict containing key 'extract_list'
             _res_df = deepcopy(res_df)
-            if each_plot_config['extract_list']:
+            if each_plot_config.get('extract_list', False):
                 for each_extract_rule in each_plot_config['extract_list']:
                     # each_extract_rule is a tuple of a column name of res_df and its value.
                     # each rule extracts entries that has
                     # the specified value in the specified column.
                     _res_df = _res_df[_res_df[each_extract_rule[0]] == each_extract_rule[1]]
-            _res_df.plot(x=self.LinePlotMultipleRun_params['x'],
-                         y=self.requires().score_name,
-                         ax=ax,
-                         **each_plot_config.get('plot_kwargs', {}))
+                _res_df.plot(x=self.LinePlotMultipleRun_params['x'],
+                             y=self.requires().score_name,
+                             ax=ax,
+                             **each_plot_config.get('plot_kwargs', {}))
+            elif each_plot_config.get('col_name', False):
+                _res_df.plot(x=self.LinePlotMultipleRun_params['x'],
+                             y=each_plot_config['col_name'],
+                             ax=ax,
+                             **each_plot_config.get('plot_kwargs', {}))
+            else:
+                raise NotImplementedError
         ax.set_xlabel(**self.LinePlotMultipleRun_params['fig_config']['xlabel'])
         ax.set_ylabel(**self.LinePlotMultipleRun_params['fig_config']['ylabel'])
         ax.legend(**self.LinePlotMultipleRun_params['fig_config']['legend'])
