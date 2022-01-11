@@ -428,6 +428,7 @@ PlotTestLoss_params = {
                 _res_df.plot(x=self.LinePlotMultipleRun_params['x'],
                              y=each_plot_config['col_name'],
                              ax=ax,
+                             yerr=each_plot_config.get('yerr_col_name', None),
                              **each_plot_config.get('plot_kwargs', {}))
             else:
                 raise NotImplementedError
