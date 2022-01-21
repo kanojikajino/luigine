@@ -428,8 +428,14 @@ PlotTestLoss_params = {
                 _res_df.plot(x=self.LinePlotMultipleRun_params['x'],
                              y=each_plot_config['col_name'],
                              ax=ax,
-                             yerr=each_plot_config.get('yerr_col_name', None),
+                             #yerr=each_plot_config.get('yerr_col_name', None),
                              **each_plot_config.get('plot_kwargs', {}))
+                if 'yerr_col_name' in each_plot_config:
+                    ax.fill_between(_res_df[self.LinePlotMultipleRun_params['x']],
+                                    _res_df[each_plot_config['col_name']] - _res_df[each_plot_config['yerr_col_name']],
+                                    _res_df[each_plot_config['col_name']] + _res_df[each_plot_config['yerr_col_name']],
+                                    alpha=0.35,
+                                    label='_nolegend_')
             else:
                 raise NotImplementedError
         ax.set_xlabel(**self.LinePlotMultipleRun_params['fig_config']['xlabel'])
