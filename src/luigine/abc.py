@@ -425,17 +425,24 @@ PlotTestLoss_params = {
                              ax=ax,
                              **each_plot_config.get('plot_kwargs', {}))
             elif each_plot_config.get('col_name', False):
+                extract_col_list = [self.LinePlotMultipleRun_params['x'],
+                                    each_plot_config['col_name']]
+                if 'yerr_col_name' in each_plot_config:
+                    extract_col_list.append(each_plot_config['yerr_col_name'])
+                _res_df = _res_df[extract_col_list].dropna(axis=1, how='all')
+                _res_df = _res_df.dropna(axis=0, how='any')
                 _res_df.plot(x=self.LinePlotMultipleRun_params['x'],
                              y=each_plot_config['col_name'],
                              ax=ax,
                              #yerr=each_plot_config.get('yerr_col_name', None),
                              **each_plot_config.get('plot_kwargs', {}))
                 if 'yerr_col_name' in each_plot_config:
-                    ax.fill_between(_res_df[self.LinePlotMultipleRun_params['x']],
-                                    _res_df[each_plot_config['col_name']] - _res_df[each_plot_config['yerr_col_name']],
-                                    _res_df[each_plot_config['col_name']] + _res_df[each_plot_config['yerr_col_name']],
-                                    alpha=0.35,
-                                    label='_nolegend_')
+                    if each_plot_config['yerr_col_name'] in _res_df.columns:
+                        ax.fill_between(_res_df[self.LinePlotMultipleRun_params['x']],
+                                        _res_df[each_plot_config['col_name']] - _res_df[each_plot_config['yerr_col_name']],
+                                        _res_df[each_plot_config['col_name']] + _res_df[each_plot_config['yerr_col_name']],
+                                        alpha=0.35,
+                                        label='_nolegend_')
             else:
                 raise NotImplementedError
         ax.set_xlabel(**self.LinePlotMultipleRun_params['fig_config']['xlabel'])
