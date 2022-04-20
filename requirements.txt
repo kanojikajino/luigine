@@ -1,3 +1,4 @@
+dill
 luigi>=2.8.11
 numpy
 sklearn

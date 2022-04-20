@@ -5,6 +5,7 @@ __author__ = 'Hiroshi Kajino, Takeshi Teshima'
 __copyright__ = 'Copyright IBM Corp. 2019, 2021'
 
 import datetime
+import dill
 import gzip
 import hashlib
 from itertools import product
@@ -203,6 +204,9 @@ class AutoNamingTask(luigi.Task):
         elif self.output_ext == 'pkl':
             with open(self.output().path, 'rb') as f:
                 res = pickle.load(f)
+        elif self.output_ext == 'dill':
+            with open(self.output().path, 'rb') as f:
+                res = dill.load(f)
         else:
             raise ValueError('ext {} is not supported'.format(self.output_ext))
         if self.remove_output_file:
@@ -216,6 +220,9 @@ class AutoNamingTask(luigi.Task):
         elif self.output_ext == 'pkl':
             with open(self.output().path, 'wb') as f:
                 pickle.dump(obj, f)
+        elif self.output_ext == 'dill':
+            with open(self.output().path, 'wb') as f:
+                dill.dump(obj, f)
         else:
             raise ValueError('ext {} is not supported'.format(self.output_ext))
         if self.use_mlflow:
