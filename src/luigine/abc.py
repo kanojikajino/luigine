@@ -428,9 +428,16 @@ PlotTestLoss_params = {
                     # the specified value in the specified column.
                     _res_df = _res_df[_res_df[each_extract_rule[0]] == each_extract_rule[1]]
                 _res_df.plot(x=self.LinePlotMultipleRun_params['x'],
-                             y=self.requires().score_name,
+                             y=each_plot_config['col_name'],
                              ax=ax,
                              **each_plot_config.get('plot_kwargs', {}))
+                if 'yerr_col_name' in each_plot_config:
+                    if each_plot_config['yerr_col_name'] in _res_df.columns:
+                        ax.fill_between(_res_df[self.LinePlotMultipleRun_params['x']],
+                                        _res_df[each_plot_config['col_name']] - _res_df[each_plot_config['yerr_col_name']],
+                                        _res_df[each_plot_config['col_name']] + _res_df[each_plot_config['yerr_col_name']],
+                                        alpha=0.35,
+                                        label='_nolegend_')
             elif each_plot_config.get('col_name', False):
                 extract_col_list = [self.LinePlotMultipleRun_params['x'],
                                     each_plot_config['col_name']]
