@@ -1,6 +1,6 @@
 dill
 luigi>=2.8.11
 numpy
-sklearn
+scikit-learn
 mlflow
 matplotlib
