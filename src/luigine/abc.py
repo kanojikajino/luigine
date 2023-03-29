@@ -170,6 +170,9 @@ class AutoNamingTask(luigi.Task):
         if not valid_input:
             raise ValueError('input format is not valid.')
 
+        logger.info('the output file will be {}'.format(
+            self._working_dir / 'OUTPUT' / self.working_subdir / '{}.{}'.format(self.param_name, self.output_ext)))
+
         self.start_time = time.time()
         res = self.run_task(input_list)
         self.end_time = time.time()
@@ -450,13 +453,15 @@ PlotTestLoss_params = {
                              ax=ax,
                              #yerr=each_plot_config.get('yerr_col_name', None),
                              **each_plot_config.get('plot_kwargs', {}))
+                color = each_plot_config['plot_kwargs']['color']
                 if 'yerr_col_name' in each_plot_config:
                     if each_plot_config['yerr_col_name'] in _res_df.columns:
                         ax.fill_between(_res_df[self.LinePlotMultipleRun_params['x']],
                                         _res_df[each_plot_config['col_name']] - _res_df[each_plot_config['yerr_col_name']],
                                         _res_df[each_plot_config['col_name']] + _res_df[each_plot_config['yerr_col_name']],
                                         alpha=0.35,
-                                        label='_nolegend_')
+                                        label='_nolegend_',
+                                        color=color)
             else:
                 raise NotImplementedError
         ax.set_xlabel(**self.LinePlotMultipleRun_params['fig_config']['xlabel'])

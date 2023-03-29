@@ -111,7 +111,6 @@ class TestPerformanceEvaluation(AutoNamingTask):
     ''' Pick up the best model (on the validation set), and examine its real performance on the test set.
     '''
 
-    output_ext = luigi.Parameter(default='txt')
     MultipleRun_params = luigi.DictParameter(
         default=MultipleRun_params)
     use_mlflow = luigi.BoolParameter(default=True)
