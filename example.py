@@ -113,7 +113,6 @@ class TestPerformanceEvaluation(AutoNamingTask):
 
     MultipleRun_params = luigi.DictParameter(
         default=MultipleRun_params)
-    use_mlflow = luigi.BoolParameter(default=True)
 
     def run_task(self, input_list):
         _, best_params = input_list[0]
@@ -128,8 +127,6 @@ class TestPerformanceEvaluation(AutoNamingTask):
         model = get_model_task.load_output()
         y_pred = model.predict(X_test)
         mse = mean_squared_error(y_test, y_pred)
-        import mlflow
-        mlflow.log_metric('mse', mse)
         logger.info(f'''
 
 ===================

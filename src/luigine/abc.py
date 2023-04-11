@@ -103,7 +103,6 @@ class AutoNamingTask(luigi.Task):
 
     __no_hash_keys__ = []
     hash_num = luigi.IntParameter(default=10)
-    use_mlflow = luigi.BoolParameter(default=False)
     remove_output_file = luigi.BoolParameter(default=False)
     copy_output_to_top = luigi.Parameter(default='')
     output_ext = luigi.Parameter(default='pklz')
@@ -113,13 +112,6 @@ class AutoNamingTask(luigi.Task):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.param_name = ''
-        if self.use_mlflow:
-            import mlflow
-            self.mlflow = mlflow
-            mlflow.set_tracking_uri(str(self._working_dir / 'mlruns'))
-            if mlflow.active_run() is None:
-                mlflow.set_experiment(self.__class__.__name__)
-                mlflow.start_run()
 
         # md5checksum of input files
         if self.input_file():
@@ -228,8 +220,6 @@ class AutoNamingTask(luigi.Task):
                 dill.dump(obj, f)
         else:
             raise ValueError('ext {} is not supported'.format(self.output_ext))
-        if self.use_mlflow:
-            self.mlflow.log_artifact(self.output().path)
 
     def check_input(self, input_list):
         ''' check the input format
