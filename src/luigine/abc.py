@@ -105,7 +105,7 @@ class AutoNamingTask(luigi.Task):
     hash_num = luigi.IntParameter(default=10)
     remove_output_file = luigi.BoolParameter(default=False)
     copy_output_to_top = luigi.Parameter(default='')
-    output_ext = luigi.Parameter(default='pklz')
+    output_ext = 'pklz'
     working_dir = luigi.Parameter()  # used for argparse
     _working_dir = ''  # containing full path
 
@@ -244,13 +244,20 @@ class AutoNamingTask(luigi.Task):
     def working_subdir(self):
         return self.__class__.__name__
 
+    @property
+    def artifacts_dir(self):
+        out_dir = self._working_dir / 'OUTPUT' / self.working_subdir / self.param_name
+        if not os.path.exists(out_dir):
+            os.mkdir(out_dir)
+        return out_dir
+
 
 class MultipleRunBase(AutoNamingTask):
 
     ''' Hyperparameter selection task.
     '''
 
-    output_ext = luigi.Parameter(default='pklz')
+    output_ext = 'pklz'
     MultipleRun_params = luigi.DictParameter()
     score_name = luigi.Parameter(default='score')
 
@@ -395,7 +402,7 @@ PlotTestLoss_params = {
 }
     '''
 
-    output_ext = luigi.Parameter(default='pdf')
+    output_ext = 'pdf'
     MultipleRun_params = luigi.DictParameter()
     LinePlotMultipleRun_params = luigi.DictParameter()
 
