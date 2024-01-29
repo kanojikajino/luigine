@@ -17,6 +17,7 @@ import time
 from copy import deepcopy
 from collections import OrderedDict
 import luigi
+from luigi.contrib.s3 import S3Target
 from luigi.setup_logging import InterfaceLogging
 import pandas as pd
 from .utils import sort_dict, dict_to_str, checksum
@@ -107,11 +108,17 @@ class AutoNamingTask(luigi.Task):
     copy_output_to_top = luigi.Parameter(default='')
     output_ext = 'pklz'
     working_dir = luigi.Parameter()  # used for argparse
+    s3_working_dir = luigi.Parameter(default='')
     _working_dir = ''  # containing full path
+    _s3_working_dir = ''
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.param_name = ''
+        if self.s3_working_dir != '':
+            self.s3_mode = True
+        else:
+            self.s3_mode = False
 
         # md5checksum of input files
         if self.input_file():
@@ -125,6 +132,10 @@ class AutoNamingTask(luigi.Task):
             param_kwargs.pop('working_dir')
         if '_working_dir' in param_kwargs:
             param_kwargs.pop('_working_dir')
+        if 's3_working_dir' in param_kwargs:
+            param_kwargs.pop('s3_working_dir')
+        if '_s3_working_dir' in param_kwargs:
+            param_kwargs.pop('_s3_working_dir')
         for each_key in self.__no_hash_keys__:
             if len(each_key) == 2:
                 self.param_name = self.param_name + str(param_kwargs[each_key[0]][each_key[1]]) + '_'
@@ -151,6 +162,17 @@ class AutoNamingTask(luigi.Task):
     def run_task(self, input_list):
         raise NotImplementedError
 
+    @property
+    def out_path(self):
+        if self.s3_mode:
+            return (self._s3_working_dir / 'OUTPUT' / self.working_subdir / '{}.{}'.format(
+                self.param_name,
+                self.output_ext)).as_uri()
+        else:
+            return self._working_dir / 'OUTPUT' / self.working_subdir / '{}.{}'.format(
+                self.param_name,
+                self.output_ext)
+
     def run(self):
         if isinstance(self.requires(), luigi.Task):
             requires_list = [self.requires()]
@@ -162,8 +184,7 @@ class AutoNamingTask(luigi.Task):
         if not valid_input:
             raise ValueError('input format is not valid.')
 
-        logger.info('the output file will be {}'.format(
-            self._working_dir / 'OUTPUT' / self.working_subdir / '{}.{}'.format(self.param_name, self.output_ext)))
+        logger.info(f'the output file will be {self.out_path}')
 
         self.start_time = time.time()
         res = self.run_task(input_list)
@@ -177,7 +198,7 @@ class AutoNamingTask(luigi.Task):
 
         if res is not None:
             self.save_output(res)
-        if self.copy_output_to_top != '':
+        if self.copy_output_to_top != '' and (not self.s3_mode):
             shutil.copy(self.output().path,
                         self._working_dir / 'OUTPUT' / self.copy_output_to_top)
 
@@ -188,19 +209,24 @@ class AutoNamingTask(luigi.Task):
                               / 'OUTPUT'
                               / self.working_subdir):
             os.mkdir(self._working_dir / 'OUTPUT' / self.working_subdir)
-        return luigi.LocalTarget(
-            self._working_dir / 'OUTPUT' / self.working_subdir /
-            '{}.{}'.format(self.param_name, self.output_ext))
+        if self.s3_mode:
+            target_method = S3Target
+        else:
+            target_method = luigi.LocalTarget
+        return target_method(self.out_path,
+                             format=luigi.format.Nop)
 
     def load_output(self):
         if self.output_ext == 'pklz':
-            with gzip.open(self.output().path, 'rb') as f:
-                res = pickle.load(f)
+            with self.output().open(mode='r') as f:
+                comp_byte_res = f.read()
+                byte_res = gzip.decompress(comp_byte_res)
+                res = pickle.loads(byte_res)
         elif self.output_ext == 'pkl':
-            with open(self.output().path, 'rb') as f:
-                res = pickle.load(f)
+            with self.output().open(mode='r') as f:
+                res = pickle.loads(f.read())
         elif self.output_ext == 'dill':
-            with open(self.output().path, 'rb') as f:
+            with self.output().open(mode='r') as f:
                 res = dill.load(f)
         else:
             raise ValueError('ext {} is not supported'.format(self.output_ext))
@@ -210,13 +236,15 @@ class AutoNamingTask(luigi.Task):
 
     def save_output(self, obj):
         if self.output_ext == 'pklz':
-            with gzip.open(self.output().path, 'wb') as f:
-                pickle.dump(obj, f)
+            with self.output().open(mode='w') as f:
+                out_byte = pickle.dumps(obj)
+                comp_out_byte = gzip.compress(out_byte)
+                f.write(comp_out_byte)
         elif self.output_ext == 'pkl':
-            with open(self.output().path, 'wb') as f:
+            with self.output().open(mode='w') as f:
                 pickle.dump(obj, f)
         elif self.output_ext == 'dill':
-            with open(self.output().path, 'wb') as f:
+            with self.output().open(mode='w') as f:
                 dill.dump(obj, f)
         else:
             raise ValueError('ext {} is not supported'.format(self.output_ext))
@@ -232,7 +260,7 @@ class AutoNamingTask(luigi.Task):
         return True
 
     def remove_output(self):
-        if os.path.exists(self.output().path):
+        if os.path.exists(self.output().path) and (not self.s3_mode):
             os.remove(self.output().path)
 
     def input_file(self):
@@ -246,9 +274,20 @@ class AutoNamingTask(luigi.Task):
 
     @property
     def artifacts_dir(self):
+        return self.local_artifacts_dir
+
+    @property
+    def local_artifacts_dir(self):
         out_dir = self._working_dir / 'OUTPUT' / self.working_subdir / self.param_name
         if not os.path.exists(out_dir):
             os.mkdir(out_dir)
+        return out_dir
+
+    @property
+    def s3_artifacts_dir(self):
+        if not self.s3_mode:
+            return self.local_artifacts_dir
+        out_dir = self._s3_working_dir / 'OUTPUT' / self.working_subdir / self.param_name
         return out_dir
 
 
