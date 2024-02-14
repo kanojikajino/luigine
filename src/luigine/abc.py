@@ -20,6 +20,8 @@ import luigi
 from luigi.contrib.s3 import S3Target
 from luigi.setup_logging import InterfaceLogging
 import pandas as pd
+import pathlib
+from s3path import S3Path
 from .utils import sort_dict, dict_to_str, checksum
 
 logger = logging.getLogger('luigi-interface')
@@ -198,9 +200,23 @@ class AutoNamingTask(luigi.Task):
 
         if res is not None:
             self.save_output(res)
-        if self.copy_output_to_top != '' and (not self.s3_mode):
-            shutil.copy(self.output().path,
-                        self._working_dir / 'OUTPUT' / self.copy_output_to_top)
+
+        if self.copy_output_to_top != '':
+            org_ext = pathlib.Path(self.output().path).suffix
+            specified_ext = pathlib.Path(self.copy_output_to_top).suffix
+            if org_ext != specified_ext:
+                output_file_name = self.copy_output_to_top + org_ext
+            else:
+                output_file_name = self.copy_output_to_top
+
+            if not self.s3_mode:
+                shutil.copy(self.output().path,
+                            self._working_dir / 'OUTPUT' / output_file_name)
+            else:
+                
+                (S3Path(self.s3_working_dir) / 'OUTPUT' / output_file_name).write_bytes(
+                    S3Path(self.output().path.removeprefix('s3:/')).read_bytes()
+                )
 
     def output(self):
         if not os.path.exists(self._working_dir / 'OUTPUT'):
