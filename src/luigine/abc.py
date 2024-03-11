@@ -306,6 +306,9 @@ class AutoNamingTask(luigi.Task):
         out_dir = self._s3_working_dir / 'OUTPUT' / self.working_subdir / self.param_name
         return out_dir
 
+    def s3_artifacts_path(self, file_name):
+        return (self.s3_artifacts_dir / file_name).as_uri().removeprefix('file:/')
+
 
 class MultipleRunBase(AutoNamingTask):
 
