@@ -107,6 +107,7 @@ class AutoNamingTask(luigi.Task):
     __no_hash_keys__ = []
     hash_num = luigi.IntParameter(default=10)
     remove_output_file = luigi.BoolParameter(default=False)
+    mlflow_params = luigi.DictParameter(default={})
     copy_output_to_top = luigi.Parameter(default='')
     output_ext = 'pklz'
     working_dir = luigi.Parameter()  # used for argparse
@@ -160,6 +161,12 @@ class AutoNamingTask(luigi.Task):
                     = self.param_name \
                     + hashlib.md5(str(param_kwargs[each_key]).encode('utf-8')).hexdigest()[:self.hash_num] + '_'
         self.param_name = self.param_name[:-1]
+        if self.mlflow_params:
+            import mlflow
+            mlflow.set_experiment(self.mlflow_params.get(
+                'experiment_name', None))
+            mlflow.set_tracking_uri(uri=self.mlflow_params.get(
+                'uri', None))
 
     def run_task(self, input_list):
         raise NotImplementedError
@@ -213,10 +220,16 @@ class AutoNamingTask(luigi.Task):
                 shutil.copy(self.output().path,
                             self._working_dir / 'OUTPUT' / output_file_name)
             else:
-                
                 (S3Path(self.s3_working_dir) / 'OUTPUT' / output_file_name).write_bytes(
                     S3Path(self.output().path.removeprefix('s3:/')).read_bytes()
                 )
+
+    def on_failure(self, exception):
+        if self.mlflow_params:
+            if hasattr(self, 'run_id'):
+                from mlflow import MlflowClient
+                MlflowClient().set_terminated(self.run_id, 'FAILED')
+        return super().on_failure(exception)
 
     def output(self):
         if not os.path.exists(self._working_dir / 'OUTPUT'):

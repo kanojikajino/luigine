@@ -64,16 +64,17 @@ def checksum(file_path):
     return md5.hexdigest()
 
 
-def dict_param2dict(dict_param, prefix=''):
+def dict_param2dict(dict_param, prefix='', separator='_'):
     output_dict = {}
     for each_key in dict_param:
         if isinstance(dict_param[each_key], (dict, luigi.freezing.FrozenOrderedDict)):
             dict_repl = dict_param2dict(
                 dict_param[each_key],
-                prefix=prefix + '_' + each_key if prefix != '' else each_key)
+                prefix=prefix + separator + each_key if prefix != '' else each_key,
+                separator=separator)
             output_dict.update(dict_repl)
         elif isinstance(dict_param[each_key], (list, tuple)):
             pass
         else:
-            output_dict[prefix + '_' + each_key] = dict_param[each_key]
+            output_dict[prefix + separator + each_key] = dict_param[each_key]
     return output_dict
