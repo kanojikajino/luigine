@@ -129,6 +129,7 @@ class AutoNamingTask(luigi.Task):
                 self.param_name = self.param_name + checksum(each_input_file)[:self.hash_num] + '_'
 
         param_kwargs = deepcopy(self.__dict__['param_kwargs'])
+        import pdb; pdb.set_trace()
         if 'working_subdir' in param_kwargs:
             param_kwargs.pop('working_subdir')
         if 'working_dir' in param_kwargs:
@@ -139,6 +140,8 @@ class AutoNamingTask(luigi.Task):
             param_kwargs.pop('s3_working_dir')
         if '_s3_working_dir' in param_kwargs:
             param_kwargs.pop('_s3_working_dir')
+        if 'mlflow_params' in param_kwargs:
+            param_kwargs.pop('mlflow_params')
         for each_key in self.__no_hash_keys__:
             if len(each_key) == 2:
                 self.param_name = self.param_name + str(param_kwargs[each_key[0]][each_key[1]]) + '_'
