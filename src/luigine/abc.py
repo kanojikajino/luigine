@@ -165,9 +165,12 @@ class AutoNamingTask(luigi.Task):
         self.param_name = self.param_name[:-1]
         if self.mlflow_params:
             import mlflow
+            mlflow.set_tracking_uri(uri=self.mlflow_params.get(
+                'uri', None))
             mlflow.set_experiment(self.mlflow_params.get(
                 'experiment_name', None))
-            mlflow.set_tracking_uri(uri=self.mlflow_params.get(
+            from mlflow import MlflowClient
+            self.mlflow_client = MlflowClient(self.mlflow_params.get(
                 'uri', None))
 
     def run_task(self, input_list):
@@ -229,8 +232,8 @@ class AutoNamingTask(luigi.Task):
     def on_failure(self, exception):
         if self.mlflow_params:
             if hasattr(self, 'run_id'):
-                from mlflow import MlflowClient
-                MlflowClient().set_terminated(self.run_id, 'FAILED')
+                self.mlflow_client.set_terminated(
+                        self.run_id, 'FAILED')
         return super().on_failure(exception)
 
     def output(self):
