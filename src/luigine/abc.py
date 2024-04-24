@@ -188,6 +188,7 @@ class AutoNamingTask(luigi.Task):
                 self.output_ext)
 
     def run(self):
+        start_time_io = time.time()
         if isinstance(self.requires(), luigi.Task):
             requires_list = [self.requires()]
         else:
@@ -200,11 +201,11 @@ class AutoNamingTask(luigi.Task):
 
         logger.info(f'the output file will be {self.out_path}')
 
-        self.start_time = time.time()
+        start_time = time.time()
         res = self.run_task(input_list)
-        self.end_time = time.time()
-        self.elapsed_seconds = self.end_time - self.start_time
-        logger.info(' * computation time: {} sec'.format(self.elapsed_seconds))
+        end_time = time.time()
+        elapsed_seconds = end_time - start_time
+        logger.info(' * computation time: {} sec'.format(elapsed_seconds))
 
         valid_output = self.check_output(res)
         if not valid_output:
@@ -228,6 +229,8 @@ class AutoNamingTask(luigi.Task):
                 (S3Path(self.s3_working_dir) / 'OUTPUT' / output_file_name).write_bytes(
                     S3Path(self.output().path.removeprefix('s3:/')).read_bytes()
                 )
+        end_time_io = time.time()
+        logger.info(f' * execution time incl. io: {end_time_io - start_time_io} sec')
 
     def on_failure(self, exception):
         if self.mlflow_params:
