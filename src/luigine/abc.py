@@ -114,12 +114,15 @@ class AutoNamingTask(luigi.Task):
     s3_working_dir = luigi.Parameter(default='')
     _working_dir = ''  # containing full path
     _s3_working_dir = ''
+    disable_mlflow = luigi.BoolParameter(default=False)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.param_name = ''
         if self.s3_working_dir != '':
             self.s3_mode = True
+            if self._s3_working_dir == '':
+                self._s3_working_dir = S3Path(self.s3_working_dir)
         else:
             self.s3_mode = False
 
@@ -129,18 +132,19 @@ class AutoNamingTask(luigi.Task):
                 self.param_name = self.param_name + checksum(each_input_file)[:self.hash_num] + '_'
 
         param_kwargs = deepcopy(self.__dict__['param_kwargs'])
-        if 'working_subdir' in param_kwargs:
-            param_kwargs.pop('working_subdir')
-        if 'working_dir' in param_kwargs:
-            param_kwargs.pop('working_dir')
-        if '_working_dir' in param_kwargs:
-            param_kwargs.pop('_working_dir')
-        if 's3_working_dir' in param_kwargs:
-            param_kwargs.pop('s3_working_dir')
-        if '_s3_working_dir' in param_kwargs:
-            param_kwargs.pop('_s3_working_dir')
-        if 'mlflow_params' in param_kwargs:
-            param_kwargs.pop('mlflow_params')
+        # the followings are not used in the hashed file name
+        for each_keyword in ['working_subdir',
+                             'working_dir',
+                             '_working_dir',
+                             's3_working_dir',
+                             '_s3_working_dir',
+                             'mlflow_params',
+                             'disable_mlflow',
+                             'hash_num',
+                             'remove_output_file',
+                             'copy_output_to_top']:
+            if each_keyword in param_kwargs:
+                param_kwargs.pop(each_keyword)
         for each_key in self.__no_hash_keys__:
             if len(each_key) == 2:
                 self.param_name = self.param_name + str(param_kwargs[each_key[0]][each_key[1]]) + '_'
@@ -163,7 +167,7 @@ class AutoNamingTask(luigi.Task):
                     = self.param_name \
                     + hashlib.md5(str(param_kwargs[each_key]).encode('utf-8')).hexdigest()[:self.hash_num] + '_'
         self.param_name = self.param_name[:-1]
-        if self.mlflow_params:
+        if self.mlflow_params and (not self.disable_mlflow):
             import mlflow
             mlflow.set_tracking_uri(uri=self.mlflow_params.get(
                 'uri', None))
@@ -179,6 +183,8 @@ class AutoNamingTask(luigi.Task):
     @property
     def out_path(self):
         if self.s3_mode:
+            if self._s3_working_dir == '':
+                self._s3_working_dir = S3Path(self.s3_working_dir)
             return (self._s3_working_dir / 'OUTPUT' / self.working_subdir / '{}.{}'.format(
                 self.param_name,
                 self.output_ext)).as_uri()
