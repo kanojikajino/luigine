@@ -322,8 +322,7 @@ class AutoNamingTask(luigi.Task):
     @property
     def local_artifacts_dir(self):
         out_dir = self._working_dir / 'OUTPUT' / self.working_subdir / self.param_name
-        if not os.path.exists(out_dir):
-            os.mkdir(out_dir)
+        out_dir.mkdir(parents=True, exist_ok=True)
         return out_dir
 
     @property
