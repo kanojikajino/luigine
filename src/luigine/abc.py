@@ -233,7 +233,7 @@ class AutoNamingTask(luigi.Task):
                             self._working_dir / 'OUTPUT' / output_file_name)
             else:
                 (S3Path(self.s3_working_dir) / 'OUTPUT' / output_file_name).write_bytes(
-                    S3Path(self.output().path.removeprefix('s3:/')).read_bytes()
+                    S3Path.from_uri(self.output().path).read_bytes()
                 )
         end_time_io = time.time()
         logger.info(f' * execution time incl. io: {end_time_io - start_time_io} sec')
