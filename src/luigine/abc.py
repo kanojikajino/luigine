@@ -270,7 +270,7 @@ class AutoNamingTask(luigi.Task):
                 res = pickle.loads(f.read())
         elif self.output_ext == 'dill':
             with self.output().open(mode='r') as f:
-                res = dill.load(f)
+                res = dill.loads(f.read())
         else:
             raise ValueError('ext {} is not supported'.format(self.output_ext))
         if self.remove_output_file:
