@@ -73,8 +73,8 @@ def dict_param2dict(dict_param, prefix='', separator='_'):
                 prefix=prefix + separator + each_key if prefix != '' else each_key,
                 separator=separator)
             output_dict.update(dict_repl)
-        elif isinstance(dict_param[each_key], (list, tuple)):
-            pass
+            #elif isinstance(dict_param[each_key], (list, tuple)):
+            #    pass
         else:
             output_dict[prefix + separator + each_key] = dict_param[each_key]
     return output_dict
