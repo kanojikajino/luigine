@@ -142,7 +142,8 @@ class AutoNamingTask(luigi.Task):
                              'disable_mlflow',
                              'hash_num',
                              'remove_output_file',
-                             'copy_output_to_top']:
+                             'copy_output_to_top',
+                             'serial_no']:
             if each_keyword in param_kwargs:
                 param_kwargs.pop(each_keyword)
         for each_key in self.__no_hash_keys__:
@@ -344,10 +345,18 @@ class MultipleRunBase(AutoNamingTask):
     output_ext = 'pklz'
     MultipleRun_params = luigi.DictParameter()
     score_name = luigi.Parameter(default='score')
+    assign_serial_no = False
 
     def requires(self):
-        task_list = [self.obj_task(**each_param_dict)
-                     for each_param_dict in self.param_dict_generator()]
+        if self.assign_serial_no:
+            task_list = [
+                self.obj_task(**each_param_dict, serial_no=each_serial_no)
+                for each_serial_no, each_param_dict
+                in enumerate(self.param_dict_generator())]
+        else:
+            task_list = [
+                self.obj_task(**each_param_dict)
+                for each_param_dict in self.param_dict_generator()]
         return task_list
 
     def obj_task(self):
