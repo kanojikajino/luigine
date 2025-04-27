@@ -168,6 +168,7 @@ class AutoNamingTask(luigi.Task):
                     = self.param_name \
                     + hashlib.md5(str(param_kwargs[each_key]).encode('utf-8')).hexdigest()[:self.hash_num] + '_'
         self.param_name = self.param_name[:-1]
+
         if self.mlflow_params and (not self.disable_mlflow):
             import mlflow
             mlflow.set_tracking_uri(uri=self.mlflow_params.get(
@@ -335,6 +336,9 @@ class AutoNamingTask(luigi.Task):
 
     def s3_artifacts_path(self, file_name):
         return (self.s3_artifacts_dir / file_name).as_uri().removeprefix('file:/')
+
+    def local_artifacts_path(self, file_name):
+        return str(self.local_artifacts_dir / file_name)
 
 
 class MultipleRunBase(AutoNamingTask):
