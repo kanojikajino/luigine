@@ -76,7 +76,7 @@ def main(working_dir):
         if (working_dir / 'engine_status.progress').exists():
             os.rename(working_dir / 'engine_status.progress',
                       working_dir / 'engine_status.complete')
-    except:
+    except Exception:
         import traceback
         if (working_dir / 'engine_status.progress').exists():
             # when KeyboardInterrupt occurs, curse_failure may be halted during its process.
@@ -87,6 +87,8 @@ def main(working_dir):
             f.write('error: {}\n'.format(datetime.datetime.now().strftime('%Y/%m/%d %H:%M:%S')))
         with open(working_dir / 'ENGLOG' / 'engine.log', 'a') as f:
             f.write(traceback.format_exc())
+
+        raise
 
 
 class AutoNamingTask(luigi.Task):
