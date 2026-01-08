@@ -22,6 +22,7 @@ from luigi.setup_logging import InterfaceLogging
 import pandas as pd
 import pathlib
 from s3path import S3Path
+import signal
 from .utils import sort_dict, dict_to_str, checksum
 
 logger = logging.getLogger('luigi-interface')
@@ -341,6 +342,43 @@ class AutoNamingTask(luigi.Task):
 
     def local_artifacts_path(self, file_name):
         return str(self.local_artifacts_dir / file_name)
+
+
+def timeout_handler(_signal, _frame):
+    logger.info('timeout!!!')
+    raise TimeoutError
+
+
+class AnytimeAutoNamingTask(AutoNamingTask):
+
+    time_budget = luigi.IntParameter()
+
+    def setup(self, input):
+        raise NotImplementedError
+
+    def result_generator(self, input):
+        raise NotImplementedError
+
+    def summarize(self, output_list):
+        raise NotImplementedError
+
+    def run_task(self, input):
+        signal.signal(signal.SIGALRM, timeout_handler)
+        timeout_minutes = self.time_budget
+        logger.info(f'using timeout from request: {timeout_minutes} minutes')
+        signal.alarm(timeout_minutes * 60)
+
+        self.setup(input)
+
+        output_list = []
+        try:
+            for each_res in self.result_generator(input):
+                output_list.append(each_res)
+        except TimeoutError:
+            logger.info('time budget exhausted')
+        finally:
+            signal.alarm(0)
+        return self.summarize(output_list)
 
 
 class MultipleRunBase(AutoNamingTask):
