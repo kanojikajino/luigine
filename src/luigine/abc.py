@@ -391,16 +391,22 @@ class MultipleRunBase(AutoNamingTask):
     score_name = luigi.Parameter(default='score')
     assign_serial_no = False
 
+    def param_condition(self, param_dict):
+        return True
+
     def requires(self):
+        param_dict_list = [each_param for each_param
+                           in self.param_dict_generator()
+                           if self.param_condition(each_param)]
         if self.assign_serial_no:
             task_list = [
                 self.obj_task(**each_param_dict, serial_no=each_serial_no)
                 for each_serial_no, each_param_dict
-                in enumerate(self.param_dict_generator())]
+                in enumerate(param_dict_list)]
         else:
             task_list = [
                 self.obj_task(**each_param_dict)
-                for each_param_dict in self.param_dict_generator()]
+                for each_param_dict in param_dict_list]
         return task_list
 
     def obj_task(self):
@@ -441,7 +447,6 @@ class MultipleRunBase(AutoNamingTask):
                 elif each_key.startswith('@'):
                     product_key_list.append(each_key[1:])
                     product_val_list.append(each_val)
-
             for each_config in product(*product_val_list):
                 out_param_dict = dict()
                 for each_key, each_val in param_dict.items():
