@@ -395,18 +395,15 @@ class MultipleRunBase(AutoNamingTask):
         return True
 
     def requires(self):
-        param_dict_list = [each_param for each_param
-                           in self.param_dict_generator()
-                           if self.param_condition(each_param)]
         if self.assign_serial_no:
             task_list = [
                 self.obj_task(**each_param_dict, serial_no=each_serial_no)
                 for each_serial_no, each_param_dict
-                in enumerate(param_dict_list)]
+                in enumerate(self.param_dict_list)]
         else:
             task_list = [
                 self.obj_task(**each_param_dict)
-                for each_param_dict in param_dict_list]
+                for each_param_dict in self.param_dict_list]
         return task_list
 
     def obj_task(self):
@@ -419,7 +416,7 @@ class MultipleRunBase(AutoNamingTask):
     def run_task(self, input_list):
         res_list = []
         for each_idx, each_param_dict in enumerate(
-                self.param_dict_generator()):
+                self.param_dict_list):
             param_df = self.extract_variable(each_param_dict)
             param_df = param_df.rename({0: each_idx})
             if isinstance(input_list[each_idx], dict):
@@ -463,6 +460,17 @@ class MultipleRunBase(AutoNamingTask):
                         out_param_dict[each_key] = each_val
                 yield out_param_dict
         return _create_subparams(self.MultipleRun_params)
+
+    @property
+    def param_dict_list(self):
+        if hasattr(self, '_param_dict_list'):
+            return self._param_dict_list
+        else:
+            self._param_dict_list = [
+                each_param for each_param
+                in self.param_dict_generator()
+                if self.param_condition(each_param)]
+        return self._param_dict_list
 
     def extract_variable(self, param_dict):
 
@@ -512,7 +520,7 @@ class HyperparameterSelectionTask(MultipleRunBase):
         else:
             best_score = -float('inf')
 
-        for each_idx, each_param_dict in enumerate(self.param_dict_generator()):
+        for each_idx, each_param_dict in enumerate(self.param_dict_list()):
             val_score = input_list[each_idx]
             if isinstance(val_score, tuple):
                 val_score = val_score[0]
