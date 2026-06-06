@@ -12,6 +12,13 @@ from luigi.util import inherits
 import luigi
 
 
+class OrderedDict(OrderedDict):
+    # Python 3.12 has a different string representation (more intuitive).
+    # To maintain backward compatibility, this class implements the old representation.
+    def __repr__(self):
+        return f"{type(self).__name__}({list(self.items())})"
+
+
 def dict_to_str(input_dict, hash_str=False):
     if hash_str:
         return hashlib.md5('_'.join(['%s=%s' % (k, input_dict[k])
