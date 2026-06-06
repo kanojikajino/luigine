@@ -25,3 +25,5 @@ Homepage = "https://github.com/kanojikajino/luigine"
 [tool.hatch.build.targets.wheel]
 packages = ["src/luigine"]
 
+[tool.uv]
+exclude-newer = "1 week"
