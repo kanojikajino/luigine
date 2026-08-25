@@ -199,6 +199,17 @@ class AutoNamingTask(luigi.Task):
                 self.output_ext)
 
     def run(self):
+        root = logging.getLogger()
+        if not root.handlers:
+            fmt = logging.Formatter('%(asctime)s %(levelname)s %(name)s %(message)s')
+            sh = logging.StreamHandler()
+            sh.setFormatter(fmt)
+            fh = logging.FileHandler(self._working_dir / 'ENGLOG' / 'engine.log', mode='a')
+            fh.setFormatter(fmt)
+            root.addHandler(sh)
+            root.addHandler(fh)
+            root.setLevel(logging.INFO)
+
         start_time_io = time.time()
         if isinstance(self.requires(), luigi.Task):
             requires_list = [self.requires()]
