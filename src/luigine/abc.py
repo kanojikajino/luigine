@@ -123,9 +123,12 @@ class AutoNamingTask(luigi.Task):
         super().__init_subclass__(**kwargs)
         # Python 3.12+ reimplemented ABCMeta in C; under Luigi's Register(ABCMeta)
         # chain __set_name__ is sometimes skipped, leaving _attribute_name unset.
-        for name, value in cls.__dict__.items():
-            if isinstance(value, luigi.Parameter) and not hasattr(value, '_attribute_name'):
-                value.__set_name__(cls, name)
+        # Walk the full MRO so ancestor Parameters (e.g. on AutoNamingTask itself)
+        # are also fixed before any instance is created.
+        for klass in cls.__mro__:
+            for name, value in klass.__dict__.items():
+                if isinstance(value, luigi.Parameter) and not hasattr(value, '_attribute_name'):
+                    value.__set_name__(klass, name)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
